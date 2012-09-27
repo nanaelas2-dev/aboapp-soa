@@ -35,6 +35,12 @@
 	<bean id="simDao" class="ma.telecomatlas.abo.dao.SimDAO">
 		<property name="jdbcTemplate" ref="jdbcTemplate" />
 	</bean>
+	<bean id="consoDao" class="ma.telecomatlas.abo.dao.ConsoDao">
+		<property name="jdbcTemplate" ref="jdbcTemplate" />
+	</bean>
+	<bean id="factureDao" class="ma.telecomatlas.abo.dao.FactureDAO">
+		<property name="jdbcTemplate" ref="jdbcTemplate" />
+	</bean>
 	<bean id="boutiqueDao" class="ma.telecomatlas.abo.dao.BoutiqueDao">
 		<property name="jdbcTemplate" ref="jdbcTemplate" />
 	</bean>
@@ -53,6 +59,26 @@
 		<property name="numeroteur" ref="numeroteur" />
 	</bean>
 
+	<!-- facturation -->
+	<bean id="facturationManager" class="ma.telecomatlas.abo.facturation.FacturationManager">
+		<property name="offreDao" ref="offreDao" />
+		<property name="consoDao" ref="consoDao" />
+		<property name="clientDao" ref="clientDao" />
+		<property name="abonnementDao" ref="abonnementDao" />
+		<property name="factureDao" ref="factureDao" />
+		<property name="paramDao" ref="paramDao" />
+		<property name="jdbcTemplate" ref="jdbcTemplate" />
+		<property name="delaiEcheance" value="${facturation.delai.echeance}" />
+	</bean>
+	<bean id="lotFacturation" class="ma.telecomatlas.abo.facturation.LotFacturation">
+		<property name="facturationManager" ref="facturationManager" />
+		<property name="abonnementDao" ref="abonnementDao" />
+		<property name="factureDao" ref="factureDao" />
+		<property name="consoDao" ref="consoDao" />
+		<property name="clientDao" ref="clientDao" />
+		<property name="paramDao" ref="paramDao" />
+		<property name="numeroteur" ref="numeroteur" />
+	</bean>
 
 	<!-- services web (publies dans cxf-servlet.xml) -->
 	<bean id="abonnementService" class="ma.telecomatlas.abo.soap.AbonnementService">
@@ -60,9 +86,13 @@
 		<property name="abonnementDao" ref="abonnementDao" />
 		<property name="offreDao" ref="offreDao" />
 		<property name="simDao" ref="simDao" />
+		<property name="factureDao" ref="factureDao" />
+		<property name="consoDao" ref="consoDao" />
 		<property name="boutiqueDao" ref="boutiqueDao" />
 		<property name="souscriptionHelper" ref="souscriptionHelper" />
 		<property name="numeroteur" ref="numeroteur" />
+		<property name="facturationManager" ref="facturationManager" />
+		<property name="lotFacturation" ref="lotFacturation" />
 		<property name="jdbcTemplate" ref="jdbcTemplate" />
 	</bean>
 
