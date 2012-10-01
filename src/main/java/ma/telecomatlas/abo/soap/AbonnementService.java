@@ -380,6 +380,102 @@ public class AbonnementService {
 		return Reponse.ok(numContrat);
 	}
 
+	// ================================================================ factures
+
+	@WebMethod
+	public List<FactureInfo> listerFactures(@WebParam(name = "codeClient") String codeClient) {
+		List<FactureInfo> res = new ArrayList<FactureInfo>();
+		Client c = clientDao.trouverParCode(codeClient);
+		if (c == null) {
+			return res;
+		}
+		List<Facture> l = factureDao.listerParClient(c.getIdClient());
+		for (int i = 0; i < l.size(); i++) {
+			res.add(versInfo(l.get(i), false));
+		}
+		return res;
+	}
+
+	@WebMethod
+	public FactureInfo consulterFacture(@WebParam(name = "numFacture") String numFacture) {
+		Facture f = factureDao.trouverParNumero(numFacture);
+		if (f == null) {
+			return null;
+		}
+		return versInfo(f, true);
+	}
+
+	@WebMethod
+	public FactureInfo simulerFacture(@WebParam(name = "numContrat") String numContrat, @WebParam(name = "mois") String mois) {
+		Abonnement a = abonnementDao.trouverParContrat(numContrat);
+		if (a == null) {
+			return null;
+		}
+		if (mois == null || mois.length() != 7) {
+			mois = DateUtil.moisCourant();
+		}
+		Facture f = facturationManager.simulerFacture(a, mois);
+		if (f == null) {
+			return null;
+		}
+		return versInfo(f, true);
+	}
+
+	/**
+	 * Paiement en caisse. Montant partiel refuse.
+	 */
+	@WebMethod
+	public Reponse enregistrerPaiement(@WebParam(name = "numFacture") String numFacture, @WebParam(name = "montant") String montant,
+			@WebParam(name = "mode") String mode, @WebParam(name = "codeBoutique") String codeBoutique) {
+		List<Map<String, Object>> l = jdbcTemplate.queryForList("SELECT ID_FACTURE, MONTANT_TTC, STATUT FROM FACTURE WHERE NUM_FACTURE = ?", numFacture);
+		if (l.isEmpty()) {
+			return Reponse.ko("facture inconnue");
+		}
+		Map<String, Object> f = l.get(0);
+		String statut = (String) f.get("STATUT");
+		if ("PAYEE".equals(statut)) {
+			return Reponse.ko("facture deja payee");
+		}
+		if ("INFO".equals(statut) || "ANNULEE".equals(statut)) {
+			return Reponse.ko("document non payable");
+		}
+		double du = ((Number) f.get("MONTANT_TTC")).doubleValue();
+		double paye = MontantUtil.lire(montant);
+		if (Math.abs(du - paye) > 0.10) {
+			return Reponse.ko("montant " + MontantUtil.texte(paye) + " different du du " + MontantUtil.texte(du));
+		}
+		jdbcTemplate.update("UPDATE FACTURE SET STATUT = 'PAYEE' WHERE NUM_FACTURE = ?", numFacture);
+		log.info("paiement " + numFacture + " " + montant + " " + mode + " boutique " + codeBoutique);
+		// ligne suspendue pour impaye : on reactive si plus rien de du
+		List<Map<String, Object>> abo = jdbcTemplate.queryForList("SELECT a.ID_ABONNEMENT, a.ID_SIM, a.STATUT, a.ID_CLIENT FROM ABONNEMENT a, FACTURE f "
+				+ "WHERE f.ID_ABONNEMENT = a.ID_ABONNEMENT AND f.NUM_FACTURE = ?", numFacture);
+		if (!abo.isEmpty() && "SUSPENDU".equals(abo.get(0).get("STATUT"))) {
+			int idClient = ((Number) abo.get(0).get("ID_CLIENT")).intValue();
+			if (factureDao.encoursImpaye(idClient) < 1) {
+				abonnementDao.changerStatut(((Number) abo.get(0).get("ID_ABONNEMENT")).intValue(), "EN_COURS");
+				simDao.changerStatut(((Number) abo.get(0).get("ID_SIM")).intValue(), "ACTIVE");
+			}
+		}
+		return Reponse.ok(numFacture);
+	}
+
+	@WebMethod
+	public List<ConsoInfo> consommations(@WebParam(name = "msisdn") String msisdn, @WebParam(name = "mois") String mois) {
+		List<ConsoInfo> res = new ArrayList<ConsoInfo>();
+		List<Consommation> l = consoDao.lister(MsisdnUtil.normaliser(msisdn), mois);
+		for (int i = 0; i < l.size(); i++) {
+			Consommation c = l.get(i);
+			ConsoInfo ci = new ConsoInfo();
+			ci.setMois(c.getMois());
+			ci.setType(c.getTypeConso());
+			ci.setQuantite(String.valueOf(c.getQuantite()));
+			ci.setUnite(c.getUnite());
+			ci.setZone(c.getZone());
+			res.add(ci);
+		}
+		return res;
+	}
+
 	@WebMethod
 	public String getVersion() {
 		return ConfigUtil.get("app.version", "?");

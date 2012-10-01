@@ -2,6 +2,7 @@
  * tam_abo : base AboApp (Telecom Atlas Mobile)
  *
  * A. Chraibi     04/2012  creation (clients, offres, abonnements, sim)
+ * N. Fassi Fihri 10/2012  facturation (consommation, facture, ligne_facture)
  *
  * mysql -u root -p < sql/tam_abo.sql
  */
@@ -105,6 +106,58 @@ create table ABONNEMENT (
 	unique key UK_ABO_CONTRAT (NUM_CONTRAT),
 	key IDX_ABO_MSISDN (MSISDN),
 	constraint FK_ABO_CLIENT foreign key (ID_CLIENT) references CLIENT (ID_CLIENT)
+) engine=InnoDB;
+
+-- releves mensuels de la plateforme reseau (fichiers CDR agreges)
+create table CONSOMMATION (
+	ID_CONSO int not null auto_increment,
+	MSISDN varchar(10) not null,
+	ID_ABONNEMENT int,
+	MOIS varchar(7) not null,
+	TYPE_CONSO varchar(12) not null,
+	QUANTITE decimal(12,2),
+	UNITE varchar(5),
+	ZONE varchar(10),
+	DATE_RELEVE date,
+	FACTURE char(1) default 'N',
+	primary key (ID_CONSO),
+	key IDX_CONSO_MSISDN_MOIS (MSISDN, MOIS)
+) engine=InnoDB;
+
+create table FACTURE (
+	ID_FACTURE int not null auto_increment,
+	NUM_FACTURE varchar(20) not null,
+	TYPE_DOC varchar(8) default 'FACTURE',
+	ID_CLIENT int not null,
+	ID_ABONNEMENT int,
+	MOIS varchar(7),
+	DATE_EMISSION date,
+	DATE_ECHEANCE date,
+	MONTANT_HT decimal(12,2),
+	MONTANT_REMISE decimal(12,2) default 0,
+	MONTANT_TVA decimal(12,2),
+	DROIT_TIMBRE decimal(10,2) default 0,
+	MONTANT_TTC decimal(12,2),
+	STATUT varchar(10) default 'EMISE',
+	LOT varchar(30),
+	primary key (ID_FACTURE),
+	unique key UK_FACTURE_NUM (NUM_FACTURE),
+	key IDX_FACT_CLIENT (ID_CLIENT),
+	key IDX_FACT_ABO_MOIS (ID_ABONNEMENT, MOIS)
+) engine=InnoDB;
+
+create table LIGNE_FACTURE (
+	ID_LIGNE int not null auto_increment,
+	ID_FACTURE int not null,
+	NUM_ORDRE int,
+	CODE_LIGNE varchar(15),
+	LIBELLE varchar(150),
+	QUANTITE decimal(12,2),
+	PU_HT decimal(10,4),
+	MONTANT_HT decimal(12,2),
+	TAUX_TVA decimal(5,2),
+	primary key (ID_LIGNE),
+	constraint FK_LIGNE_FACTURE foreign key (ID_FACTURE) references FACTURE (ID_FACTURE)
 ) engine=InnoDB;
 
 create table PARAMETRE (
