@@ -16,12 +16,24 @@
 		List<Map<String, Object>> abos = jt.queryForList("select a.*, ob.LIBELLE_COMMERCIAL, ob.PRIX_AFFICHE, s.ICCID, s.STATUT as STATUT_SIM "
 			+ "from ABONNEMENT a left join OFFRE_BOUTIQUE ob on ob.CODE_OFFRE = a.CODE_OFFRE and ob.ID_BOUTIQUE is null "
 			+ "left join SIM s on s.ID_SIM = a.ID_SIM where a.ID_CLIENT = ? order by a.DATE_DEBUT", id);
+		List<Map<String, Object>> facts = jt.queryForList("select f.*, a.MSISDN from FACTURE f left join ABONNEMENT a on a.ID_ABONNEMENT = f.ID_ABONNEMENT "
+			+ "where f.ID_CLIENT = ? order by f.MOIS desc, f.NUM_FACTURE limit 36", id);
+		double impaye = 0;
+		for (int i = 0; i < facts.size(); i++) {
+			Object st = facts.get(i).get("STATUT");
+			if ("EMISE".equals(st) || "IMPAYEE".equals(st)) {
+				impaye += ((Number) facts.get(i).get("MONTANT_TTC")).doubleValue();
+			}
+		}
 %>
 <h2><%= c.getNomComplet() %> <span class="petit">(<%= c.getCodeClient() %> - <%= c.getStatut() %>)</span></h2>
 <table class="fiche">
 <tr><td>Type</td><td><%= c.isEntreprise() ? "Entreprise" : "Particulier" %></td><td>CIN / ICE</td><td><%= c.isEntreprise() ? c.getIce() : c.getCin() %></td></tr>
 <tr><td>Adresse</td><td><%= c.getAdresse() %>, <%= c.getVille() %></td><td>T&eacute;l. contact</td><td><%= c.getTelContact() == null ? "" : c.getTelContact() %></td></tr>
 <tr><td>E-mail</td><td><%= c.getEmail() == null ? "-" : c.getEmail() %></td><td>Client depuis</td><td><%= DateUtil.versFr(c.getClientDepuis()) %></td></tr>
+<% if (impaye > 0) { %>
+<tr><td colspan="4" class="erreur">Encours non r&eacute;gl&eacute; : <%= MontantUtil.affichage(impaye) %></td></tr>
+<% } %>
 </table>
 
 <h3>Lignes</h3>
@@ -43,6 +55,27 @@
 </tr>
 <% } %>
 </table>
+
+<h3>Factures</h3>
+<table class="liste">
+<tr><th>Num&eacute;ro</th><th>Mois</th><th>Ligne</th><th>Type</th><th>HT</th><th>TVA</th><th>TTC</th><th>&Eacute;ch&eacute;ance</th><th>Statut</th></tr>
+<% for (int i = 0; i < facts.size(); i++) {
+	Map<String, Object> f = facts.get(i);
+%>
+<tr class="<%= i % 2 == 0 ? "pair" : "impair" %>">
+  <td><%= f.get("NUM_FACTURE") %></td>
+  <td><%= f.get("MOIS") %></td>
+  <td><%= f.get("MSISDN") %></td>
+  <td><%= f.get("TYPE_DOC") %></td>
+  <td align="right"><%= f.get("MONTANT_HT") %></td>
+  <td align="right"><%= f.get("MONTANT_TVA") %></td>
+  <td align="right"><b><%= f.get("MONTANT_TTC") %></b></td>
+  <td><%= f.get("DATE_ECHEANCE") %></td>
+  <td class="st<%= f.get("STATUT") %>"><%= f.get("STATUT") %></td>
+</tr>
+<% } %>
+</table>
+<% if (facts.isEmpty()) { %><p>Aucune facture.</p><% } %>
 
 <%
 		System.out.println("[client.jsp] " + "fiche " + c.getCodeClient() + " par " + session.getAttribute("boutique"));
