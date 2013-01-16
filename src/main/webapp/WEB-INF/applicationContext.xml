@@ -96,4 +96,19 @@
 		<property name="jdbcTemplate" ref="jdbcTemplate" />
 	</bean>
 
+	<!-- batch activation SIM + facturation sur demande -->
+	<bean id="fichierReseau" class="ma.telecomatlas.abo.batch.FichierActivationReseau">
+		<property name="dossierSortie" value="${reseau.dossier.sortie}" />
+		<property name="codeOperateur" value="${reseau.code.operateur}" />
+	</bean>
+	<bean id="activationSimJob" class="ma.telecomatlas.abo.batch.ActivationSimJob" init-method="demarrer" destroy-method="arreter">
+		<property name="simDao" ref="simDao" />
+		<property name="abonnementDao" ref="abonnementDao" />
+		<property name="paramDao" ref="paramDao" />
+		<property name="jdbcTemplate" ref="jdbcTemplate" />
+		<property name="fichierReseau" ref="fichierReseau" />
+		<property name="periode" value="${batch.activation.periode}" />
+		<property name="max" value="${batch.activation.max}" />
+		<property name="actif" value="${batch.activation.actif}" />
+	</bean>
 </beans>
