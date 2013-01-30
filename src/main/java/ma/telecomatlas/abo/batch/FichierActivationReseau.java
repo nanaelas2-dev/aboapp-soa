@@ -33,7 +33,7 @@ public class FichierActivationReseau {
         Date maintenant = new Date();
         String horo = new SimpleDateFormat("yyyyMMdd_HHmmss").format(maintenant);
         String nom = "ACT_" + codeOperateur + "_" + horo + ".dat";
-        File tmp = new File(dir, nom);
+        File tmp = new File(dir, nom + ".tmp");
         PrintWriter pw = new PrintWriter(new FileWriter(tmp));
         try {
             pw.print(pad("H" + codeOperateur + new SimpleDateFormat("yyyyMMddHHmmss").format(maintenant) + zeros(sims.size(), 6), 80));
@@ -56,6 +56,11 @@ public class FichierActivationReseau {
             pw.print("\r\n");
         } finally {
             pw.close();
+        }
+        // renommage a la fin pour que la plateforme ne ramasse pas un fichier incomplet
+        File fin = new File(dir, nom);
+        if (!tmp.renameTo(fin)) {
+            System.out.println("renommage impossible " + tmp.getAbsolutePath());
         }
         return nom;
     }
