@@ -70,6 +70,24 @@ public class OffreDao extends AbstractDao {
         return jdbcTemplate.query("SELECT * FROM OFFRE ORDER BY CODE_OFFRE", mapperOffre);
     }
 
+    /**
+     * Tarif en vigueur pour un mois donne (yyyy-MM).
+     */
+    public OffreTarif tarif(String code, String mois) {
+        List<OffreTarif> l = jdbcTemplate.query("SELECT * FROM OFFRE_TARIF WHERE CODE_OFFRE = ? AND DATE_DEBUT <= ? "
+                + "AND (DATE_FIN IS NULL OR DATE_FIN >= ?) ORDER BY DATE_DEBUT DESC", mapperTarif, code, mois + "-28", mois + "-01");
+        if (l.isEmpty()) {
+            return null;
+        }
+        return l.get(0);
+    }
+
+    // ancienne version (avant les tarifs dates), encore utilisee par l'ecran fiche
+    public OffreTarif tarif(String code) {
+        List<OffreTarif> l = jdbcTemplate.query("SELECT * FROM OFFRE_TARIF WHERE CODE_OFFRE = ?", mapperTarif, code);
+        return l.isEmpty() ? null : l.get(0);
+    }
+
     public void desactiver(String code) {
         jdbcTemplate.update("UPDATE OFFRE SET ACTIF = 0 WHERE CODE_OFFRE = ?", code);
     }

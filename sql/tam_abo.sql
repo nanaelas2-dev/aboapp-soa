@@ -3,6 +3,7 @@
  *
  * A. Chraibi     04/2012  creation (clients, offres, abonnements, sim)
  * N. Fassi Fihri 10/2012  facturation (consommation, facture, ligne_facture)
+ * K. Saidi       06/2013  offre_tarif (tarifs du service facturation)
  *
  * mysql -u root -p < sql/tam_abo.sql
  */
@@ -66,6 +67,27 @@ create table OFFRE (
 	DATE_LANCEMENT date,
 	COMMENTAIRE varchar(200),
 	primary key (CODE_OFFRE)
+) engine=InnoDB;
+
+-- tarifs utilises par la facturation
+create table OFFRE_TARIF (
+	ID_TARIF int not null auto_increment,
+	CODE_OFFRE varchar(15) not null,
+	LIBELLE_OFFRE varchar(80),
+	TYPE_OFFRE varchar(10),
+	PRIX_HT decimal(10,2),
+	PRIX_TTC decimal(10,2),
+	PRIX_MIN_NAT decimal(8,2),
+	PRIX_MIN_INTER decimal(8,2),
+	PRIX_SMS decimal(8,2),
+	PRIX_MO decimal(8,2),
+	FORFAIT_MINUTES int,
+	FORFAIT_SMS int,
+	FORFAIT_MO int,
+	DATE_DEBUT date,
+	DATE_FIN date,
+	primary key (ID_TARIF),
+	key IDX_TARIF_OFFRE (CODE_OFFRE)
 ) engine=InnoDB;
 
 create table SIM (
