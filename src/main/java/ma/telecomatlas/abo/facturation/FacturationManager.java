@@ -165,6 +165,8 @@ public class FacturationManager {
 		Facture f;
 		if (TYPE_PREPAYE.equals(type)) {
 			f = calculerPrepaye(ctx);
+		} else if (TYPE_ENTREPRISE.equals(type)) {
+			f = calculerEntreprise(ctx);
 		} else {
 			f = calculerPostpaye(ctx);
 		}
@@ -438,6 +440,43 @@ public class FacturationManager {
 	}
 
 	// =====================================================================
+	// entreprises (flottes, pro, m2m)
+	// =====================================================================
+
+	private Facture calculerEntreprise(Contexte ctx) {
+		Facture f = nouvelleFacture(ctx, DOC_FACTURE);
+		String libOffre = ctx.tarif.getLibelleOffre() != null ? ctx.tarif.getLibelleOffre() : ctx.abo.getCodeOffre();
+
+		double forfait = montantForfait(ctx);
+		if (ctx.abo.getAncienneOffre() != null && DateUtil.memeMois(ctx.abo.getDateChgtOffre(), ctx.mois)) {
+			forfait = ligneChangementOffre(ctx, f, forfait);
+		} else if (ctx.prorata < 1.0) {
+			double p = MontantUtil.arrondi(forfait * ctx.prorata);
+			ligne(f, L_FORFAIT, "Forfait " + libOffre + " - " + libelleMois(ctx.mois) + " (prorata " + Math.round(ctx.prorata * ctx.nbJours) + " j)", ctx.prorata, forfait, p);
+		} else {
+			ligne(f, L_FORFAIT, "Forfait " + libOffre + " - " + libelleMois(ctx.mois), 1, forfait, forfait);
+		}
+
+		horsForfaitVoixEntreprise(ctx, f);
+		horsForfaitSmsEntreprise(ctx, f);
+		horsForfaitDataEntreprise(ctx, f);
+		internationalEntreprise(ctx, f);
+		roamingEntreprise(ctx, f);
+
+		remiseFlotte(ctx, f);
+
+		if ("SUSPENDU".equals(ctx.abo.getStatut()) && ctx.annee >= 2015) {
+			ligne(f, L_FRAIS, "Frais de suspension de ligne", 1, 20.0, 20.0);
+		}
+		if (ctx.abo.getDateResiliation() != null && DateUtil.memeMois(ctx.abo.getDateResiliation(), ctx.mois)) {
+			penaliteResiliationEntreprise(ctx, f);
+		}
+
+		calculerTotauxEntreprise(ctx, f);
+		return f;
+	}
+
+	// =====================================================================
 	// prorata / changement d'offre
 	// =====================================================================
 
@@ -458,6 +497,10 @@ public class FacturationManager {
 		int jours = dernier - premier + 1;
 		if (jours <= 0) {
 			return 0;
+		}
+		// regle 2012 : mois de 30 jours (on a garde pour les contrats d'avant 2014)
+		if (debut != null && DateUtil.annee(debut) < 2014) {
+			return Math.min(1.0, jours / 30.0);
 		}
 		return jours / (double) ctx.nbJours;
 	}
@@ -510,6 +553,21 @@ public class FacturationManager {
 		}
 	}
 
+	// copie de penaliteResiliation, les entreprises payent 100% des mois restants (contrat cadre)
+	private void penaliteResiliationEntreprise(Contexte ctx, Facture f) {
+		Date finEng = ctx.abo.getDateFinEngagement();
+		Date res = ctx.abo.getDateResiliation();
+		if (finEng == null || !res.before(finEng)) {
+			return;
+		}
+		int restants = DateUtil.moisEntre(res, finEng) + 1;
+		double forfait = ctx.tarif.getPrixHt();
+		double pen = MontantUtil.arrondi(restants * forfait);
+		if (pen > 0) {
+			ligne(f, L_PENALITE, "Indemnite de resiliation anticipee (" + restants + " mois)", restants, forfait, pen);
+		}
+	}
+
 	// =====================================================================
 	// forfaits par offre
 	// =====================================================================
@@ -521,10 +579,22 @@ public class FacturationManager {
 		String code = ctx.abo.getCodeOffre();
 		if ("PP-SALAM".equals(code)) {
 			return forfaitSalam(ctx);
+		} else if ("PP-JAWAL20".equals(code)) {
+			return forfaitJawal20(ctx);
 		} else if ("PO-NJOUM79".equals(code)) {
 			return forfaitNjoum79(ctx);
 		} else if ("PO-NJOUM149".equals(code)) {
 			return forfaitNjoum149(ctx);
+		} else if ("PO-NJOUM249".equals(code)) {
+			return forfaitNjoum249(ctx);
+		} else if ("EN-PRO200".equals(code)) {
+			return forfaitPro200(ctx);
+		} else if ("EN-PRO400".equals(code)) {
+			return forfaitPro400(ctx);
+		} else if ("EN-FLOTTE150".equals(code)) {
+			return forfaitFlotte150(ctx);
+		} else if ("EN-FLOTTE300".equals(code)) {
+			return forfaitFlotte300(ctx);
 		}
 		// offre inconnue : prix du tarif tel quel
 		log.warn("pas de regle de forfait pour " + code);
@@ -540,6 +610,23 @@ public class FacturationManager {
 
 		// pas de pass, la consommation est valorisee au tarif prepaye
 		prix = 0;
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Jawal 20 (pass 1 Go) */
+	private double forfaitJawal20(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(20.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2013) {
+			log.warn("PP-JAWAL20 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.annee == 2013 && ctx.moisNum >= 6 && ctx.moisNum <= 8) {
+			// lancement ete 2013 : pass a 15 Dh
+			prix = MontantUtil.ht(15.0, TAUX_TVA);
+		}
 		return MontantUtil.arrondi(prix);
 	}
 
@@ -577,6 +664,87 @@ public class FacturationManager {
 				// le tarif du mois n'a pas ete trouve, on remet l'ancien prix
 				prix = MontantUtil.ht(159.0, TAUX_TVA);
 			}
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Njoum 249 */
+	private double forfaitNjoum249(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(249.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2013) {
+			log.warn("PO-NJOUM249 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.minutesNat > 1200 && ctx.annee >= 2017) {
+			ligne(ctx.facture, L_BONUS, "Appels illimites vers 3 numeros favoris", 1, 0, 0);
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Pro 200 */
+	private double forfaitPro200(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(199.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2013) {
+			log.warn("EN-PRO200 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		// OFFRE_TARIF est a 200 Dh TTC, le contrat cadre dit 199 : on garde le tarif
+		if (ctx.nbLignes >= 50) {
+			prix = prix - 10;
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Pro 400 */
+	private double forfaitPro400(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(399.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2013) {
+			log.warn("EN-PRO400 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.annee == 2013) {
+			prix = MontantUtil.ht(379.0, TAUX_TVA);
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Flotte 150 */
+	private double forfaitFlotte150(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(150.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2014) {
+			log.warn("EN-FLOTTE150 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.nbLignes > 10 && ctx.annee >= 2016) {
+			prix = MontantUtil.ht(140.0, TAUX_TVA);
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Flotte 300 (vendue par le commercial grands comptes) */
+	private double forfaitFlotte300(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(300.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2014) {
+			log.warn("EN-FLOTTE300 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.nbLignes > 10 && ctx.annee >= 2016) {
+			prix = MontantUtil.ht(285.0, TAUX_TVA);
 		}
 		return MontantUtil.arrondi(prix);
 	}
@@ -803,9 +971,154 @@ public class FacturationManager {
 		return total;
 	}
 
+	// ---------------------------------------------------------------- hors forfait Entreprise
+
+	private double horsForfaitVoixEntreprise(Contexte ctx, Facture f) {
+		if (ctx.minutesNat <= 0) {
+			return 0;
+		}
+		// pas de blocage
+		int forfaitMin = (ctx.offre != null ? ctx.offre.getMinutes() : ctx.tarif.getForfaitMinutes());
+		if (forfaitMin < 0) {
+			// illimite
+			return 0;
+		}
+		double inclus = (ctx.offre != null ? ctx.offre.getMinutes() : ctx.tarif.getForfaitMinutes());
+		double depasse = Math.ceil(ctx.minutesNat - inclus);
+		if (depasse <= 0) {
+			return 0;
+		}
+		double pu = ctx.tarif.getPrixMinNat();
+		double mt = MontantUtil.arrondi(depasse * pu);
+		ligne(f, L_HF_VOIX, "Communications nationales hors forfait", depasse, pu, mt);
+		return mt;
+	}
+
+	private double horsForfaitSmsEntreprise(Contexte ctx, Facture f) {
+		if (ctx.sms <= 0) {
+			return 0;
+		}
+		// pas de blocage
+		int forfaitSms = (ctx.offre != null ? ctx.offre.getNbSms() : ctx.tarif.getForfaitSms());
+		if (forfaitSms < 0) {
+			return 0;
+		}
+		double depasse = Math.ceil(ctx.sms - (ctx.offre != null ? ctx.offre.getNbSms() : ctx.tarif.getForfaitSms()));
+		if (depasse <= 0) {
+			return 0;
+		}
+		double pu = ctx.tarif.getPrixSms();
+		double mt = MontantUtil.arrondi(depasse * pu);
+		ligne(f, L_HF_SMS, "SMS hors forfait", depasse, pu, mt);
+		return mt;
+	}
+
+	private double horsForfaitDataEntreprise(Contexte ctx, Facture f) {
+		if (ctx.dataMo <= 0) {
+			return 0;
+		}
+		// pas de blocage
+		int forfaitMo = (ctx.offre != null ? ctx.offre.getDataMo() : ctx.tarif.getForfaitMo());
+		if (forfaitMo < 0) {
+			return 0;
+		}
+		double depasse = Math.ceil(ctx.dataMo - (ctx.offre != null ? ctx.offre.getDataMo() : ctx.tarif.getForfaitMo()));
+		if (depasse <= 0) {
+			return 0;
+		}
+		double pu = ctx.tarif.getPrixMo();
+		double mt = MontantUtil.arrondi(depasse * pu);
+		String lib = "Internet mobile hors forfait (" + (long) depasse + " Mo)";
+		if (mt > PLAFOND_DATA_ENTREPRISE) {
+			mt = PLAFOND_DATA_ENTREPRISE;
+			lib = lib + " (plafond contrat cadre)";
+		}
+		ligne(f, L_HF_DATA, lib, depasse, pu, mt);
+		return mt;
+	}
+
+	private double internationalEntreprise(Contexte ctx, Facture f) {
+		double total = 0;
+		for (int i = 0; i < ZONES.length; i++) {
+			String z = ZONES[i];
+			Double q = ctx.inter.get(z);
+			if (q == null || q.doubleValue() <= 0) {
+				continue;
+			}
+			double pu = ctx.tarif.getPrixMinInter() * coefZone(z) / (1 + TAUX_TVA / 100);
+			if ("EUROPE".equals(z) && ctx.annee >= 2015) {
+				// accord grands comptes 2015 : -10% sur l'Europe
+				pu = pu * 0.9;
+			}
+			double mt = MontantUtil.arrondi(Math.ceil(q.doubleValue()) * pu);
+			ligne(f, L_INTER, "Appels internationaux " + z.toLowerCase(), Math.ceil(q.doubleValue()), pu, mt);
+			total += mt;
+		}
+		return total;
+	}
+
+	private double roamingEntreprise(Contexte ctx, Facture f) {
+		double total = 0;
+		Iterator<String> it = ctx.roaming.keySet().iterator();
+		while (it.hasNext()) {
+			String z = it.next();
+			double q = ctx.roaming.get(z).doubleValue();
+			double pu;
+			if ("EUROPE".equals(z)) {
+				pu = ROAMING_EUROPE;
+			} else if ("GOLFE".equals(z)) {
+				pu = ROAMING_GOLFE;
+			} else if ("AFRIQUE".equals(z)) {
+				pu = ROAMING_AFRIQUE;
+			} else {
+				pu = ROAMING_AUTRE;
+			}
+			pu = pu * 1.0;
+			if (ctx.annee < 2017) {
+				// ancienne grille (x2)
+				pu = pu * 2;
+			}
+			double mt = MontantUtil.arrondi(q * pu);
+			ligne(f, L_ROAMING, "Internet en itinerance " + z.toLowerCase() + " (" + (long) q + " Mo)", q, pu, mt);
+			total += mt;
+		}
+		if (ctx.annee >= 2017 && total > PLAFOND_ROAMING) {
+			// plafond reglementaire, on ajoute une ligne negative
+			ligne(f, L_ROAMING, "Plafonnement itinerance", 1, -(total - PLAFOND_ROAMING), -(total - PLAFOND_ROAMING));
+			total = PLAFOND_ROAMING;
+		}
+		return total;
+	}
+
 	// =====================================================================
 	// remises
 	// =====================================================================
+
+	/**
+	 * Remise flotte entreprises selon le nombre de lignes actives du client.
+	 */
+	private double remiseFlotte(Contexte ctx, Facture f) {
+		int n = ctx.nbLignes;
+		double taux = 0;
+		if (n >= 20) {
+			taux = 0.15;
+		} else if (n >= 10) {
+			taux = 0.10;
+		} else if (n >= 5) {
+			taux = 0.05;
+		}
+		if ("EN-M2M10".equals(ctx.abo.getCodeOffre())) {
+			// pas de remise sur le M2M
+			taux = 0;
+		}
+		if (taux == 0) {
+			return 0;
+		}
+		double base = totalLignes(f, L_FORFAIT);
+		double r = MontantUtil.arrondi(base * taux);
+		ligne(f, L_REMISE, "Remise flotte " + n + " lignes (" + Math.round(taux * 100) + "%)", 1, -r, -r);
+		return r;
+	}
 
 	// =====================================================================
 	// totaux, taxes
@@ -833,6 +1146,44 @@ public class FacturationManager {
 		double timbre = calculerTimbre(ctx, base + tva);
 		double ttc = base + tva + timbre;
 		ttc = arrondiParticulier(ctx, ttc);
+		f.setMontantHt(ht);
+		f.setMontantRemise(remise);
+		f.setMontantTva(tva);
+		f.setDroitTimbre(timbre);
+		f.setMontantTtc(ttc);
+	}
+
+	// copie de calculerTotaux pour les entreprises (pas de timbre, arrondi au dixieme pour les anciens clients)
+	private void calculerTotauxEntreprise(Contexte ctx, Facture f) {
+		double ht = 0;
+		double remise = 0;
+		for (int i = 0; i < f.getLignes().size(); i++) {
+			LigneFacture l = f.getLignes().get(i);
+			if (l.getMontantHt() < 0) {
+				remise += -l.getMontantHt();
+			} else {
+				ht += l.getMontantHt();
+			}
+		}
+		ht = MontantUtil.arrondi(ht);
+		remise = MontantUtil.arrondi(remise);
+		double base = ht - remise;
+		if (base < 0) {
+			base = 0;
+		}
+		double tva = calculerTva(ctx, f, base);
+		double timbre = 0;
+		if ("ESPECES".equals(ctx.abo.getModePaiement())) {
+			// ne devrait pas arriver (contrat cadre = virement ou cheque)
+			timbre = calculerTimbre(ctx, base + tva);
+		}
+		double ttc = base + tva + timbre;
+		Date creation = ctx.client.getDateCreation();
+		if (creation != null && DateUtil.annee(creation) < 2016) {
+			ttc = arrondiDixieme(ttc);
+		} else {
+			ttc = arrondiCentime(ttc);
+		}
 		f.setMontantHt(ht);
 		f.setMontantRemise(remise);
 		f.setMontantTva(tva);
@@ -1096,6 +1447,8 @@ public class FacturationManager {
 		Facture f;
 		if (TYPE_PREPAYE.equals(type)) {
 			return null;
+		} else if (TYPE_ENTREPRISE.equals(type)) {
+			f = calculerEntreprise(ctx);
 		} else {
 			f = calculerPostpaye(ctx);
 		}
