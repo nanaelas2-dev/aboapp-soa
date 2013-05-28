@@ -183,6 +183,16 @@ public class AbonnementService {
 		return versInfo(c);
 	}
 
+	/** recherche par numero de ligne (appel entrant au centre de service) */
+	@WebMethod
+	public ClientInfo clientParNumero(@WebParam(name = "msisdn") String msisdn) {
+		Abonnement a = abonnementDao.trouverParMsisdn(MsisdnUtil.normaliser(msisdn));
+		if (a == null) {
+			return null;
+		}
+		return versInfo(clientDao.trouver(a.getIdClient()));
+	}
+
 	// ================================================================ offres
 
 	/**
@@ -378,6 +388,23 @@ public class AbonnementService {
 		abonnementDao.changerStatut(a.getIdAbonnement(), "EN_COURS");
 		simDao.changerStatut(a.getIdSim(), "ACTIVE");
 		return Reponse.ok(numContrat);
+	}
+
+	/** remplacement de SIM (perte, vol) : la nouvelle passe A_ACTIVER, le batch fait le reste */
+	@WebMethod
+	public Reponse remplacerSim(@WebParam(name = "numContrat") String numContrat, @WebParam(name = "nouvelIccid") String iccid) {
+		Abonnement a = abonnementDao.trouverParContrat(numContrat);
+		if (a == null) {
+			return Reponse.ko("contrat inconnu");
+		}
+		CarteSim s = simDao.trouverParIccid(iccid);
+		if (s == null || !"STOCK".equals(s.getStatut())) {
+			return Reponse.ko("SIM indisponible " + iccid);
+		}
+		simDao.changerStatut(a.getIdSim(), "PERDUE");
+		simDao.reserver(s.getIdSim(), a.getMsisdn());
+		jdbcTemplate.update("UPDATE ABONNEMENT SET ID_SIM = ? WHERE ID_ABONNEMENT = ?", s.getIdSim(), a.getIdAbonnement());
+		return Reponse.ok(iccid);
 	}
 
 	// ================================================================ factures
