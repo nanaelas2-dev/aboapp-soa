@@ -232,6 +232,7 @@ public class AbonnementService {
 		if (!"ACTIF".equals(c.getStatut())) {
 			return Reponse.ko("client " + c.getStatut());
 		}
+		// TODO adil 2013-03 : seuil impaye a mettre dans PARAMETRE
 		// impayes : pas de nouvelle ligne au dela de 500 DH
 		double impaye = factureDao.encoursImpaye(c.getIdClient());
 		if (impaye > 500) {
