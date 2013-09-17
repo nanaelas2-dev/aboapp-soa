@@ -1573,6 +1573,140 @@ public class FacturationManager {
 	// =====================================================================
 
 	/**
+	 * Version 2 du calcul (2013) : tout dans une seule methode, avant la separation
+	 * prepaye / postpaye / entreprise. Gardee pour comparer en cas de reclamation sur
+	 * une facture 2013.
+	 * @deprecated remplace par calculerFacture
+	 */
+	public Facture calculerFactureV2(int idAbonnement, String mois) {
+		Map<String, Object> abo;
+		try {
+			abo = jdbcTemplate.queryForMap("SELECT a.*, c.TYPE_CLIENT, c.CLIENT_DEPUIS FROM ABONNEMENT a, CLIENT c WHERE a.ID_CLIENT = c.ID_CLIENT AND a.ID_ABONNEMENT = ?", idAbonnement);
+		} catch (Exception e) {
+			e.printStackTrace();
+			return null;
+		}
+		String codeOffre = (String) abo.get("CODE_OFFRE");
+		String msisdn = (String) abo.get("MSISDN");
+		String typeClient = (String) abo.get("TYPE_CLIENT");
+		String modePaiement = (String) abo.get("MODE_PAIEMENT");
+
+		List<Map<String, Object>> tarifs = jdbcTemplate.queryForList("SELECT * FROM OFFRE_TARIF WHERE CODE_OFFRE = ?", codeOffre);
+		if (tarifs.isEmpty()) {
+			System.out.println("V2 : pas de tarif pour " + codeOffre);
+			return null;
+		}
+		Map<String, Object> t = tarifs.get(0);
+		double prixHt = num(t.get("PRIX_HT"));
+		double prixMin = num(t.get("PRIX_MIN_NAT"));
+		double prixInter = num(t.get("PRIX_MIN_INTER"));
+		double prixSms = num(t.get("PRIX_SMS"));
+		double prixMo = num(t.get("PRIX_MO"));
+		int fMin = (int) num(t.get("FORFAIT_MINUTES"));
+		int fSms = (int) num(t.get("FORFAIT_SMS"));
+		int fMo = (int) num(t.get("FORFAIT_MO"));
+
+		Facture f = new Facture();
+		f.setTypeDoc(DOC_FACTURE);
+		f.setIdClient(((Number) abo.get("ID_CLIENT")).intValue());
+		f.setIdAbonnement(idAbonnement);
+		f.setMois(mois);
+		f.setDateEmission(new Date());
+		f.setDateEcheance(DateUtil.ajouterJours(new Date(), 15));
+		f.setStatut("EMISE");
+
+		if (codeOffre.startsWith("PP-")) {
+			f.setTypeDoc(DOC_RELEVE);
+			f.setStatut("INFO");
+		}
+
+		// forfait
+		if (prixHt > 0) {
+			f.ajouterLigne(new LigneFacture(L_FORFAIT, "Abonnement " + num(t.get("PRIX_TTC")) + " DH", 1, prixHt, prixHt));
+		}
+
+		List<Map<String, Object>> consos = jdbcTemplate.queryForList("SELECT TYPE_CONSO, ZONE, SUM(QUANTITE) AS Q FROM CONSOMMATION WHERE MSISDN = ? AND MOIS = ? GROUP BY TYPE_CONSO, ZONE",
+				msisdn, mois);
+		double hf = 0;
+		for (int i = 0; i < consos.size(); i++) {
+			Map<String, Object> c = consos.get(i);
+			String type = (String) c.get("TYPE_CONSO");
+			double q = num(c.get("Q"));
+			if ("VOIX_NAT".equals(type)) {
+				if (fMin >= 0 && q > fMin) {
+					double mt = MontantUtil.arrondi((q - fMin) * prixMin / 1.2);
+					f.ajouterLigne(new LigneFacture(L_HF_VOIX, "Depassement forfait voix", q - fMin, prixMin / 1.2, mt));
+					hf += mt;
+				}
+			} else if ("SMS".equals(type)) {
+				if (fSms >= 0 && q > fSms) {
+					double mt = MontantUtil.arrondi((q - fSms) * prixSms / 1.2);
+					f.ajouterLigne(new LigneFacture(L_HF_SMS, "Depassement SMS", q - fSms, prixSms / 1.2, mt));
+					hf += mt;
+				}
+			} else if ("DATA".equals(type)) {
+				if (fMo >= 0 && q > fMo) {
+					double mt = MontantUtil.arrondi((q - fMo) * prixMo);
+					f.ajouterLigne(new LigneFacture(L_HF_DATA, "Depassement internet", q - fMo, prixMo, mt));
+					hf += mt;
+				}
+			} else if ("VOIX_INTER".equals(type)) {
+				String z = zone((String) c.get("ZONE"));
+				double pu = prixInter * coefZone(z) / 1.2;
+				double mt = MontantUtil.arrondi(q * pu);
+				f.ajouterLigne(new LigneFacture(L_INTER, "International " + z, q, pu, mt));
+				hf += mt;
+			} else if ("ROAMING".equals(type)) {
+				double mt = MontantUtil.arrondi(q * 5.0);
+				f.ajouterLigne(new LigneFacture(L_ROAMING, "Itinerance", q, 5.0, mt));
+				hf += mt;
+			}
+		}
+
+		double ht = prixHt + hf;
+		double remise = 0;
+		// remise entreprise 2013 : 10% sur tout
+		if ("ENTR".equals(typeClient)) {
+			remise = MontantUtil.arrondi(ht * 0.10);
+			f.ajouterLigne(new LigneFacture(L_REMISE, "Remise entreprise", 1, -remise, -remise));
+		}
+		String promo = (String) abo.get("CODE_PROMO");
+		if ("BIENVENUE".equals(promo)) {
+			Date debut = DateUtil.depuisSql(String.valueOf(abo.get("DATE_DEBUT")));
+			if (debut != null && DateUtil.memeMois(debut, mois)) {
+				remise += prixHt;
+				f.ajouterLigne(new LigneFacture(L_PROMO, "1er mois offert", 1, -prixHt, -prixHt));
+			}
+		}
+		double base = ht - remise;
+		double tva = MontantUtil.arrondi(base * 0.20);
+		double timbre = "ESPECES".equals(modePaiement) ? 0.20 : 0;
+		f.setMontantHt(MontantUtil.arrondi(ht));
+		f.setMontantRemise(remise);
+		f.setMontantTva(tva);
+		f.setDroitTimbre(timbre);
+		f.setMontantTtc(MontantUtil.arrondi(base + tva + timbre));
+		if ("ENTR".equals(typeClient)) {
+			f.setMontantTtc(arrondiDixieme(f.getMontantTtc()));
+		}
+		return f;
+	}
+
+	private double num(Object o) {
+		if (o == null) {
+			return 0;
+		}
+		if (o instanceof Number) {
+			return ((Number) o).doubleValue();
+		}
+		try {
+			return Double.parseDouble(o.toString());
+		} catch (NumberFormatException e) {
+			return 0;
+		}
+	}
+
+	/**
 	 * Version 1 du prepaye (2012) : un releve avec juste le nombre de minutes et SMS.
 	 * @deprecated
 	 */
