@@ -397,7 +397,8 @@ public class FacturationManager {
 		roamingPostpaye(ctx, f);
 
 
-		// 4. frais
+		// 4. frais, cas particuliers
+		ajustementsAnnuels(ctx, f);
 		if ("SUSPENDU".equals(ctx.abo.getStatut()) && ctx.annee >= 2015) {
 			ligne(f, L_FRAIS, "Frais de suspension de ligne", 1, 20.0, 20.0);
 		}
@@ -1854,6 +1855,100 @@ public class FacturationManager {
 			v.add(t);
 		}
 		return v;
+	}
+
+	// =====================================================================
+	// cas particuliers par annee
+	// =====================================================================
+
+	/**
+	 * Ajustements ponctuels decides en cours d'annee (notes de la direction commerciale).
+	 * A nettoyer un jour : les annees passees ne servent plus qu'en cas de recalcul.
+	 */
+	private void ajustementsAnnuels(Contexte ctx, Facture f) {
+		switch (ctx.annee) {
+		case 2012:
+			ajustements2012(ctx, f);
+			break;
+		case 2013:
+			ajustements2013(ctx, f);
+			break;
+		case 2014:
+			ajustements2014(ctx, f);
+			break;
+		case 2015:
+			ajustements2015(ctx, f);
+			break;
+		case 2016:
+		case 2017:
+			ajustements2016(ctx, f);
+			break;
+		case 2018:
+			ajustements2018(ctx, f);
+			break;
+		default:
+			ajustements2018(ctx, f);
+		}
+	}
+
+	private void ajustements2012(Contexte ctx, Facture f) {
+		// lancement : frais d'activation 50 Dh sur la 1ere facture postpayee
+		if (DateUtil.memeMois(ctx.abo.getDateDebut(), ctx.mois) && !TYPE_PREPAYE.equals(typeOffre(ctx))) {
+			ligne(f, L_FRAIS, "Frais de mise en service", 1, 41.67, 41.67);
+		}
+		double csu = contributionServiceUniversel(ctx, totalLignes(f, L_FORFAIT));
+		if (csu > 0) {
+			ligne(f, L_FRAIS, "Contribution service universel", 1, csu, csu);
+		}
+	}
+
+	private void ajustements2013(Contexte ctx, Facture f) {
+		if (DateUtil.memeMois(ctx.abo.getDateDebut(), ctx.mois) && !TYPE_PREPAYE.equals(typeOffre(ctx))) {
+			ligne(f, L_FRAIS, "Frais de mise en service", 1, 41.67, 41.67);
+		}
+		// panne reseau Casablanca du 14 au 16 novembre 2013 : 3 jours de forfait rembourses
+		if (ctx.moisNum == 11 && "Casablanca".equalsIgnoreCase(ctx.client.getVille())) {
+			double base = totalLignes(f, L_FORFAIT);
+			double r = MontantUtil.arrondi(base * 3 / ctx.nbJours);
+			if (r > 0) {
+				ligne(f, L_REMISE, "Geste commercial incident reseau du 14/11", 1, -r, -r);
+			}
+		}
+	}
+
+	private void ajustements2014(Contexte ctx, Facture f) {
+		// frais de mise en service supprimes au 01/03/2014
+		if (ctx.moisNum < 3 && DateUtil.memeMois(ctx.abo.getDateDebut(), ctx.mois) && !TYPE_PREPAYE.equals(typeOffre(ctx))) {
+			ligne(f, L_FRAIS, "Frais de mise en service", 1, 41.67, 41.67);
+		}
+	}
+
+	private void ajustements2015(Contexte ctx, Facture f) {
+		// facture papier : 5 Dh / mois pour les particuliers qui n'ont pas d'e-mail (a partir de juin 2015)
+		if (ctx.moisNum >= 6 && !ctx.client.isEntreprise() && (ctx.client.getEmail() == null || ctx.client.getEmail().length() == 0)) {
+			ligne(f, L_FRAIS, "Facture papier", 1, 4.17, 4.17);
+		}
+	}
+
+	private void ajustements2016(Contexte ctx, Facture f) {
+		if (!ctx.client.isEntreprise() && (ctx.client.getEmail() == null || ctx.client.getEmail().length() == 0)) {
+			ligne(f, L_FRAIS, "Facture papier", 1, 4.17, 4.17);
+		}
+		// coupure Oujda / Nador janvier 2016
+		if (ctx.annee == 2016 && ctx.moisNum == 1 && ("Oujda".equalsIgnoreCase(ctx.client.getVille()) || "Nador".equalsIgnoreCase(ctx.client.getVille()))) {
+			double base = totalLignes(f, L_FORFAIT);
+			double r = MontantUtil.arrondi(base * 0.25);
+			if (r > 0) {
+				ligne(f, L_REMISE, "Geste commercial incident reseau Oriental", 1, -r, -r);
+			}
+		}
+	}
+
+	private void ajustements2018(Contexte ctx, Facture f) {
+		// facture papier : gratuite depuis avril 2018 (decision ANRT)
+		if (ctx.moisNum < 4 && !ctx.client.isEntreprise() && (ctx.client.getEmail() == null || ctx.client.getEmail().length() == 0)) {
+			ligne(f, L_FRAIS, "Facture papier", 1, 4.17, 4.17);
+		}
 	}
 
 	// =====================================================================
