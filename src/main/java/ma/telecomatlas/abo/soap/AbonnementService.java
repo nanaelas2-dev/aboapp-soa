@@ -282,6 +282,22 @@ public class AbonnementService {
 		return versInfo(a, clientDao.trouver(a.getIdClient()));
 	}
 
+	/**
+	 * Devis de changement d'offre : difference de prix mensuel (prix boutique) + frais.
+	 */
+	@WebMethod
+	public String devisChangementOffre(@WebParam(name = "numContrat") String numContrat, @WebParam(name = "nouvelleOffre") String nouvelleOffre) {
+		Abonnement a = abonnementDao.trouverParContrat(numContrat);
+		if (a == null) {
+			return "";
+		}
+		double ecart = tarifsBoutique.ecart(a.getCodeOffre(), nouvelleOffre);
+		if (ecart < 0) {
+			ecart = ecart + 30.0; // frais de changement vers une offre inferieure (TTC)
+		}
+		return MontantUtil.texte(ecart);
+	}
+
 	@WebMethod
 	public Reponse changerOffre(@WebParam(name = "numContrat") String numContrat, @WebParam(name = "nouvelleOffre") String nouvelleOffre,
 			@WebParam(name = "dateEffet") String dateEffet) {

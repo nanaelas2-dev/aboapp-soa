@@ -88,6 +88,10 @@ public class OffreDao extends AbstractDao {
         return l.isEmpty() ? null : l.get(0);
     }
 
+    public List<Map<String, Object>> catalogueBoutique(int idBoutique) {
+        return jdbcTemplate.queryForList("SELECT * FROM OFFRE_BOUTIQUE WHERE EN_VENTE = 'O' AND (ID_BOUTIQUE IS NULL OR ID_BOUTIQUE = ?) ORDER BY ORDRE_AFFICHAGE", idBoutique);
+    }
+
     public void desactiver(String code) {
         jdbcTemplate.update("UPDATE OFFRE SET ACTIF = 0 WHERE CODE_OFFRE = ?", code);
     }

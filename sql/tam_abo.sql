@@ -4,6 +4,7 @@
  * A. Chraibi     04/2012  creation (clients, offres, abonnements, sim)
  * N. Fassi Fihri 10/2012  facturation (consommation, facture, ligne_facture)
  * K. Saidi       06/2013  offre_tarif (tarifs du service facturation)
+ * N. Fassi Fihri 02/2014  offre_boutique (catalogue boutiques)
  *
  * mysql -u root -p < sql/tam_abo.sql
  */
@@ -88,6 +89,20 @@ create table OFFRE_TARIF (
 	DATE_FIN date,
 	primary key (ID_TARIF),
 	key IDX_TARIF_OFFRE (CODE_OFFRE)
+) engine=InnoDB;
+
+-- catalogue affiche en boutique
+create table OFFRE_BOUTIQUE (
+	ID int not null auto_increment,
+	CODE_OFFRE varchar(15) not null,
+	LIBELLE_COMMERCIAL varchar(100),
+	CATEGORIE varchar(20),
+	PRIX_AFFICHE decimal(10,2),
+	ID_BOUTIQUE int,
+	EN_VENTE char(1) default 'O',
+	MENTION_PROMO varchar(100),
+	ORDRE_AFFICHAGE int default 0,
+	primary key (ID)
 ) engine=InnoDB;
 
 create table SIM (

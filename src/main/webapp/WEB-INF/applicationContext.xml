@@ -60,6 +60,9 @@
 	</bean>
 
 	<!-- facturation -->
+	<bean id="tarifsBoutique" class="ma.telecomatlas.abo.facturation.TarifsBoutique">
+		<property name="jdbcTemplate" ref="jdbcTemplate" />
+	</bean>
 	<bean id="facturationManager" class="ma.telecomatlas.abo.facturation.FacturationManager">
 		<property name="offreDao" ref="offreDao" />
 		<property name="consoDao" ref="consoDao" />
@@ -93,6 +96,7 @@
 		<property name="numeroteur" ref="numeroteur" />
 		<property name="facturationManager" ref="facturationManager" />
 		<property name="lotFacturation" ref="lotFacturation" />
+		<property name="tarifsBoutique" ref="tarifsBoutique" />
 		<property name="jdbcTemplate" ref="jdbcTemplate" />
 	</bean>
 
