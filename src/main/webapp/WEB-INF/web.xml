@@ -34,6 +34,10 @@
 		<filter-name>AuthFilter</filter-name>
 		<url-pattern>*.jsp</url-pattern>
 	</filter-mapping>
+	<filter-mapping>
+		<filter-name>AuthFilter</filter-name>
+		<url-pattern>/export</url-pattern>
+	</filter-mapping>
 
 	<servlet>
 		<servlet-name>CXFServlet</servlet-name>
@@ -61,6 +65,15 @@
 	<servlet-mapping>
 		<servlet-name>LogoutServlet</servlet-name>
 		<url-pattern>/deconnexion</url-pattern>
+	</servlet-mapping>
+
+	<servlet>
+		<servlet-name>ExportFactures</servlet-name>
+		<servlet-class>ma.telecomatlas.abo.web.ExportFacturesServlet</servlet-class>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>ExportFactures</servlet-name>
+		<url-pattern>/export</url-pattern>
 	</servlet-mapping>
 
 	<session-config>
