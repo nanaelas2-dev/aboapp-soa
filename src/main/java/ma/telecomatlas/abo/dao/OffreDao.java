@@ -94,5 +94,6 @@ public class OffreDao extends AbstractDao {
 
     public void desactiver(String code) {
         jdbcTemplate.update("UPDATE OFFRE SET ACTIF = 0 WHERE CODE_OFFRE = ?", code);
+        // TODO nadia 2014-05 : desactiver aussi dans OFFRE_BOUTIQUE ?
     }
 }
