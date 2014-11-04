@@ -396,6 +396,9 @@ public class FacturationManager {
 		internationalPostpaye(ctx, f);
 		roamingPostpaye(ctx, f);
 
+		// 3. promotions et remises
+		appliquerPromotions(ctx, f);
+		remiseFidelite(ctx, f);
 
 		// 4. frais, cas particuliers
 		ajustementsAnnuels(ctx, f);
@@ -464,6 +467,7 @@ public class FacturationManager {
 		internationalEntreprise(ctx, f);
 		roamingEntreprise(ctx, f);
 
+		appliquerPromotionsEntreprise(ctx, f);
 		remiseFlotte(ctx, f);
 
 		if ("SUSPENDU".equals(ctx.abo.getStatut()) && ctx.annee >= 2015) {
@@ -584,6 +588,8 @@ public class FacturationManager {
 			return forfaitJawal20(ctx);
 		} else if ("PO-NJOUM79".equals(code)) {
 			return forfaitNjoum79(ctx);
+		} else if ("PO-NJOUM99".equals(code)) {
+			return forfaitNjoum99(ctx);
 		} else if ("PO-NJOUM149".equals(code)) {
 			return forfaitNjoum149(ctx);
 		} else if ("PO-NJOUM249".equals(code)) {
@@ -646,6 +652,27 @@ public class FacturationManager {
 		if (ctx.annee >= 2016) {
 			// TODO nadia 2016-02 : migrer les derniers Njoum 79 vers Njoum 99 ?
 			prix = prix + 0;
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Njoum 99 */
+	private double forfaitNjoum99(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(99.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2014) {
+			log.warn("PO-NJOUM99 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.annee == 2014 && ctx.moisNum <= 3) {
+			// promo de lancement : 3 premiers mois a 89 Dh
+			prix = MontantUtil.ht(89.0, TAUX_TVA);
+		}
+		if (ctx.abo.getDateDebut() != null && DateUtil.annee(ctx.abo.getDateDebut()) < 2018 && ctx.annee >= 2018) {
+			// passage de 4 a 10 Go en 2018 pour tout le monde, meme prix
+			ctx.trace.append(" njoum99-2018");
 		}
 		return MontantUtil.arrondi(prix);
 	}
@@ -1092,8 +1119,207 @@ public class FacturationManager {
 	}
 
 	// =====================================================================
+	// promotions
+	// =====================================================================
+
+	/**
+	 * Promotions particuliers. Le code promo est saisi en boutique a la souscription
+	 * (ABONNEMENT.CODE_PROMO). Une seule promo par contrat.
+	 */
+	private double appliquerPromotions(Contexte ctx, Facture f) {
+		String code = ctx.abo.getCodePromo();
+		if (code == null || code.trim().length() == 0) {
+			return 0;
+		}
+		code = code.trim().toUpperCase();
+		double remise = 0;
+		if ("BIENVENUE".equals(code)) {
+			remise = promoBienvenue(ctx, f);
+		} else if ("FIDELITE".equals(code)) {
+			remise = promoFidelite(ctx, f);
+		} else if ("RAMADAN".equals(code) || code.startsWith("RAMADAN")) {
+			remise = promoRamadan(ctx, f);
+		} else if ("PARRAINAGE".equals(code)) {
+			remise = promoParrainage(ctx, f);
+		} else if ("NOEL2012".equals(code)) {
+			remise = promoNoel2012(ctx, f);
+		} else {
+			log.info("code promo inconnu " + code + " contrat " + ctx.abo.getNumContrat());
+		}
+		if (remise != 0) {
+			ctx.trace.append(" promo=").append(code).append(":").append(remise);
+		}
+		return remise;
+	}
+
+	/**
+	 * Meme chose pour les entreprises mais seules certaines promos sont acceptees.
+	 */
+	private double appliquerPromotionsEntreprise(Contexte ctx, Facture f) {
+		String code = ctx.abo.getCodePromo();
+		if (code == null || code.trim().length() == 0) {
+			return 0;
+		}
+		code = code.trim().toUpperCase();
+		double remise = 0;
+		if ("BIENVENUE".equals(code)) {
+			// entreprises : bienvenue = 1er mois a 50% seulement
+			if (DateUtil.moisEntre(ctx.abo.getDateDebut(), ctx.finMois) == 0) {
+				double base = totalLignes(f, L_FORFAIT);
+				remise = MontantUtil.arrondi(base * 0.5);
+				ligne(f, L_PROMO, "Offre de bienvenue entreprise -50% (1er mois)", 1, -remise, -remise);
+			}
+		} else if ("FIDELITE".equals(code)) {
+			// pas de promo fidelite pour les entreprises, la remise flotte s'applique deja
+			log.debug("promo FIDELITE ignoree pour entreprise " + ctx.abo.getNumContrat());
+		} else {
+			log.info("code promo non applicable aux entreprises " + code + " contrat " + ctx.abo.getNumContrat());
+		}
+		return remise;
+	}
+
+	/** BIENVENUE : -50% sur le forfait les 3 premiers mois (depuis 2014, avant : 1 mois offert) */
+	private double promoBienvenue(Contexte ctx, Facture f) {
+		int n = DateUtil.moisEntre(ctx.abo.getDateDebut(), ctx.finMois);
+		double base = totalLignes(f, L_FORFAIT);
+		if (base <= 0) {
+			return 0;
+		}
+		Date debut = ctx.abo.getDateDebut();
+		if (debut != null && DateUtil.annee(debut) < 2014) {
+			if (n == 0) {
+				ligne(f, L_PROMO, "Offre de bienvenue : 1er mois offert", 1, -base, -base);
+				return base;
+			}
+			return 0;
+		}
+		if (n < 3) {
+			double r = MontantUtil.arrondi(base * 0.5);
+			ligne(f, L_PROMO, "Offre de bienvenue -50% (mois " + (n + 1) + "/3)", 1, -r, -r);
+			return r;
+		}
+		return 0;
+	}
+
+	/** FIDELITE : 10% sur le forfait pour les clients de plus de 5 ans (reengagement) */
+	private double promoFidelite(Contexte ctx, Facture f) {
+		if (ctx.ancienneteMois < SEUIL_FIDELITE_2 && ctx.annee >= 2016) {
+			return 0;
+		}
+		double base = totalLignes(f, L_FORFAIT);
+		double r = MontantUtil.arrondi(base * 0.10);
+		if (r > 0) {
+			ligne(f, L_PROMO, "Promotion reengagement fidelite -10%", 1, -r, -r);
+		}
+		return r;
+	}
+
+	/**
+	 * RAMADAN : data doublee + 20% sur le hors forfait voix pendant le mois sacre.
+	 * Les dates changent chaque annee, en dur avant 2016 puis dans PARAMETRE.
+	 */
+	private double promoRamadan(Contexte ctx, Facture f) {
+		Date debut = null;
+		Date fin = null;
+		switch (ctx.annee) {
+		case 2012:
+			debut = DateUtil.lire("2012-07-20", DateUtil.FMT_SQL);
+			fin = DateUtil.lire("2012-08-18", DateUtil.FMT_SQL);
+			break;
+		case 2013:
+			debut = DateUtil.lire("2013-07-09", DateUtil.FMT_SQL);
+			fin = DateUtil.lire("2013-08-07", DateUtil.FMT_SQL);
+			break;
+		case 2014:
+			debut = DateUtil.lire("2014-06-29", DateUtil.FMT_SQL);
+			fin = DateUtil.lire("2014-07-28", DateUtil.FMT_SQL);
+			break;
+		case 2015:
+			debut = DateUtil.lire("2015-06-18", DateUtil.FMT_SQL);
+			fin = DateUtil.lire("2015-07-17", DateUtil.FMT_SQL);
+			break;
+		default:
+			debut = DateUtil.lire(paramDao.lire("PROMO_RAMADAN_DEBUT", ""), DateUtil.FMT_SQL);
+			fin = DateUtil.lire(paramDao.lire("PROMO_RAMADAN_FIN", ""), DateUtil.FMT_SQL);
+		}
+		if (debut == null || fin == null) {
+			return 0;
+		}
+		if (fin.before(ctx.debutMois) || debut.after(ctx.finMois)) {
+			return 0;
+		}
+		double hf = totalLignes(f, L_HF_VOIX);
+		double r = MontantUtil.arrondi(hf * 0.20);
+		if (r > 0) {
+			ligne(f, L_PROMO, "Ramadan Karim : -20% sur les appels hors forfait", 1, -r, -r);
+		}
+		ligne(f, L_BONUS, "Ramadan Karim : Internet double", 1, 0, 0);
+		return r;
+	}
+
+	/** PARRAINAGE : 30 Dh HT de remise par mois pendant 6 mois */
+	private double promoParrainage(Contexte ctx, Facture f) {
+		int n = DateUtil.moisEntre(ctx.abo.getDateDebut(), ctx.finMois);
+		if (n >= 6) {
+			return 0;
+		}
+		double base = totalLignes(f, L_FORFAIT);
+		double r = Math.min(30.0, base);
+		if (r > 0) {
+			ligne(f, L_PROMO, "Parrainage : -30 Dh (" + (n + 1) + "/6)", 1, -r, -r);
+		}
+		return r;
+	}
+
+	/** NOEL2012 : jamais lancee (annulee par la direction), garde au cas ou */
+	private double promoNoel2012(Contexte ctx, Facture f) {
+		if (ctx.annee != 2012 || ctx.moisNum != 12) {
+			return 0;
+		}
+		double sms = totalLignes(f, L_HF_SMS);
+		if (sms > 0) {
+			ligne(f, L_PROMO, "SMS offerts pour les fetes", 1, -sms, -sms);
+		}
+		return sms;
+	}
+
+	// =====================================================================
 	// remises
 	// =====================================================================
+
+	/**
+	 * Remise fidelite particuliers (sur forfait uniquement) :
+	 * plus de 24 mois : 5%, plus de 60 mois : 10%.
+	 * Pas cumulable avec une promo FIDELITE ou BIENVENUE.
+	 */
+	private double remiseFidelite(Contexte ctx, Facture f) {
+		String promo = ctx.abo.getCodePromo();
+		if ("FIDELITE".equals(promo) || "BIENVENUE".equals(promo)) {
+			return 0;
+		}
+		if (ctx.annee < 2013) {
+			return 0;
+		}
+		double taux = 0;
+		if (ctx.ancienneteMois >= SEUIL_FIDELITE_2) {
+			taux = 0.10;
+		} else if (ctx.ancienneteMois >= SEUIL_FIDELITE_1) {
+			taux = 0.05;
+		}
+		// 2013-2014 : 5% seulement, quelle que soit l'anciennete
+		if (ctx.annee <= 2014 && taux > 0.05) {
+			taux = 0.05;
+		}
+		if (taux == 0) {
+			return 0;
+		}
+		double base = totalLignes(f, L_FORFAIT);
+		double r = MontantUtil.arrondi(base * taux);
+		if (r > 0) {
+			ligne(f, L_REMISE, "Remise fidelite " + Math.round(taux * 100) + "% (" + ctx.ancienneteMois / 12 + " ans)", 1, -r, -r);
+		}
+		return r;
+	}
 
 	/**
 	 * Remise flotte entreprises selon le nombre de lignes actives du client.
@@ -1118,6 +1344,17 @@ public class FacturationManager {
 		double base = totalLignes(f, L_FORFAIT);
 		double r = MontantUtil.arrondi(base * taux);
 		ligne(f, L_REMISE, "Remise flotte " + n + " lignes (" + Math.round(taux * 100) + "%)", 1, -r, -r);
+		return r;
+	}
+
+	/** ancienne remise 2012 (avant la grille fidelite) */
+	private double remiseAnciennete2012(Contexte ctx, Facture f) {
+		if (ctx.ancienneteMois < 12) {
+			return 0;
+		}
+		double base = totalLignes(f, L_FORFAIT);
+		double r = MontantUtil.arrondi(Math.min(base * 0.03, 10.0));
+		ligne(f, L_REMISE, "Remise anciennete", 1, -r, -r);
 		return r;
 	}
 
