@@ -520,6 +520,45 @@ public class AbonnementService {
 		return res;
 	}
 
+	// ================================================================ portabilite (saisie boutique)
+
+	/**
+	 * Saisie d'une demande de portabilite entrante. Doublon de PortabiliteService.saisirDemande
+	 * garde pour l'ancienne version de la caisse (avant 2016).
+	 */
+	@WebMethod
+	public Reponse demandePortabilite(@WebParam(name = "codeClient") String codeClient, @WebParam(name = "msisdn") String msisdn,
+			@WebParam(name = "operateur") String operateur, @WebParam(name = "rio") String rio, @WebParam(name = "codeBoutique") String codeBoutique) {
+		Client c = clientDao.trouverParCode(codeClient);
+		if (c == null) {
+			return Reponse.ko("client inconnu");
+		}
+		String num = MsisdnUtil.normaliser(msisdn);
+		if (!MsisdnUtil.estMobile(num)) {
+			return Reponse.ko("numero invalide");
+		}
+		if (portabiliteDao.enCoursPourNumero(num)) {
+			return Reponse.ko("demande deja en cours pour " + num);
+		}
+		if (rio == null || rio.trim().length() < 9) {
+			return Reponse.ko("RIO invalide");
+		}
+		DemandePortabilite d = new DemandePortabilite();
+		d.setRefDemande(numeroteur.refPortabilite());
+		d.setMsisdn(num);
+		d.setOperateurDonneur(operateur);
+		d.setCodeRio(rio.toUpperCase());
+		d.setIdClient(c.getIdClient());
+		d.setDateDemande(new Date());
+		d.setDatePortage(DateUtil.ajouterJours(new Date(), ConfigUtil.getInt("porta.delai.jours", 3)));
+		d.setStatut("SAISIE");
+		Boutique b = codeBoutique == null ? null : boutiqueDao.trouverParCode(codeBoutique);
+		d.setIdBoutique(b == null ? c.getIdBoutique() : b.getIdBoutique());
+		d.setSaisiPar("boutique " + (b == null ? "?" : b.getCodeBoutique()));
+		portabiliteDao.inserer(d);
+		return Reponse.ok(d.getRefDemande());
+	}
+
 	@WebMethod
 	public String getVersion() {
 		return ConfigUtil.get("app.version", "?");

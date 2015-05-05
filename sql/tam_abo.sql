@@ -5,6 +5,7 @@
  * N. Fassi Fihri 10/2012  facturation (consommation, facture, ligne_facture)
  * K. Saidi       06/2013  offre_tarif (tarifs du service facturation)
  * N. Fassi Fihri 02/2014  offre_boutique (catalogue boutiques)
+ * K. Saidi       05/2015  demande_portabilite
  *
  * mysql -u root -p < sql/tam_abo.sql
  */
@@ -195,6 +196,24 @@ create table LIGNE_FACTURE (
 	TAUX_TVA decimal(5,2),
 	primary key (ID_LIGNE),
 	constraint FK_LIGNE_FACTURE foreign key (ID_FACTURE) references FACTURE (ID_FACTURE)
+) engine=InnoDB;
+
+create table DEMANDE_PORTABILITE (
+	ID_DEMANDE int not null auto_increment,
+	REF_DEMANDE varchar(20),
+	MSISDN varchar(10) not null,
+	OPERATEUR_DONNEUR varchar(5),
+	CODE_RIO varchar(12),
+	ID_CLIENT int,
+	ID_ABONNEMENT int,
+	DATE_DEMANDE date,
+	DATE_PORTAGE date,
+	STATUT varchar(10) default 'SAISIE',
+	MOTIF_REFUS varchar(150),
+	SAISI_PAR varchar(40),
+	ID_BOUTIQUE int,
+	COMMENTAIRE varchar(250),
+	primary key (ID_DEMANDE)
 ) engine=InnoDB;
 
 create table PARAMETRE (

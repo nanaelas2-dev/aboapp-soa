@@ -9,5 +9,7 @@
 	<!-- caisse boutiques -->
 	<jaxws:endpoint id="abonnementWS" implementor="#abonnementService" address="/AbonnementService" />
 
+	<!-- back-office portabilite (2015) -->
+	<jaxws:endpoint id="portabiliteWS" implementor="#portabiliteService" address="/PortabiliteService" />
 
 </beans>

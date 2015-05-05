@@ -47,6 +47,9 @@
 	<bean id="paramDao" class="ma.telecomatlas.abo.dao.ParamDao">
 		<property name="jdbcTemplate" ref="jdbcTemplate" />
 	</bean>
+	<bean id="portabiliteDao" class="ma.telecomatlas.abo.dao.PortabiliteDao">
+		<property name="jdbcTemplate" ref="jdbcTemplate" />
+	</bean>
 
 	<!-- metier -->
 	<bean id="numeroteur" class="ma.telecomatlas.abo.metier.NumeroteurHelper">
@@ -92,12 +95,19 @@
 		<property name="factureDao" ref="factureDao" />
 		<property name="consoDao" ref="consoDao" />
 		<property name="boutiqueDao" ref="boutiqueDao" />
+		<property name="portabiliteDao" ref="portabiliteDao" />
 		<property name="souscriptionHelper" ref="souscriptionHelper" />
 		<property name="numeroteur" ref="numeroteur" />
 		<property name="facturationManager" ref="facturationManager" />
 		<property name="lotFacturation" ref="lotFacturation" />
 		<property name="tarifsBoutique" ref="tarifsBoutique" />
 		<property name="jdbcTemplate" ref="jdbcTemplate" />
+	</bean>
+	<bean id="portabiliteService" class="ma.telecomatlas.abo.soap.PortabiliteService">
+		<property name="portabiliteDao" ref="portabiliteDao" />
+		<property name="clientDao" ref="clientDao" />
+		<property name="abonnementDao" ref="abonnementDao" />
+		<property name="numeroteur" ref="numeroteur" />
 	</bean>
 
 	<!-- batch activation SIM + facturation sur demande -->
