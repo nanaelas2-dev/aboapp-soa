@@ -18,6 +18,7 @@
 			+ "left join SIM s on s.ID_SIM = a.ID_SIM where a.ID_CLIENT = ? order by a.DATE_DEBUT", id);
 		List<Map<String, Object>> facts = jt.queryForList("select f.*, a.MSISDN from FACTURE f left join ABONNEMENT a on a.ID_ABONNEMENT = f.ID_ABONNEMENT "
 			+ "where f.ID_CLIENT = ? order by f.MOIS desc, f.NUM_FACTURE limit 36", id);
+		List<Map<String, Object>> portas = jt.queryForList("select * from DEMANDE_PORTABILITE where ID_CLIENT = ? order by DATE_DEMANDE desc", id);
 		double impaye = 0;
 		for (int i = 0; i < facts.size(); i++) {
 			Object st = facts.get(i).get("STATUT");
@@ -77,6 +78,17 @@
 </table>
 <% if (facts.isEmpty()) { %><p>Aucune facture.</p><% } %>
 
+<% if (!portas.isEmpty()) { %>
+<h3>Portabilit&eacute;</h3>
+<table class="liste">
+<tr><th>R&eacute;f.</th><th>Num&eacute;ro</th><th>Op&eacute;rateur</th><th>Demande</th><th>Portage</th><th>Statut</th><th>Commentaire</th></tr>
+<% for (int i = 0; i < portas.size(); i++) { Map<String, Object> d = portas.get(i); %>
+<tr><td><%= d.get("REF_DEMANDE") %></td><td><%= d.get("MSISDN") %></td><td><%= d.get("OPERATEUR_DONNEUR") %></td>
+<td><%= d.get("DATE_DEMANDE") %></td><td><%= d.get("DATE_PORTAGE") == null ? "" : d.get("DATE_PORTAGE") %></td><td><%= d.get("STATUT") %></td>
+<td><%= d.get("COMMENTAIRE") == null ? "" : d.get("COMMENTAIRE") %><%= d.get("MOTIF_REFUS") == null ? "" : " " + d.get("MOTIF_REFUS") %></td></tr>
+<% } %>
+</table>
+<% } %>
 <%
 		System.out.println("[client.jsp] " + "fiche " + c.getCodeClient() + " par " + session.getAttribute("boutique"));
 	}
