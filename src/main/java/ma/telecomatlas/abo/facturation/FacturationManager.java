@@ -1219,6 +1219,7 @@ public class FacturationManager {
 	 * Les dates changent chaque annee, en dur avant 2016 puis dans PARAMETRE.
 	 */
 	private double promoRamadan(Contexte ctx, Facture f) {
+		// TODO nadia 2015-05 : dates a mettre en parametre pour 2016 (fait pour >= 2016)
 		Date debut = null;
 		Date fin = null;
 		switch (ctx.annee) {
