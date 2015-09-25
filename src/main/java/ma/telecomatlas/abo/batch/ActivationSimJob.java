@@ -18,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * Batch lance au demarrage de l'appli (init-method) :
  *  - SIM A_ACTIVER -> fichier pour la plateforme reseau -> ACTIVE
+ *  - lecture des comptes rendus reseau
  *
  * @author ksaidi
  */
@@ -30,6 +31,7 @@ public class ActivationSimJob extends Thread {
     private ParamDao paramDao;
     private JdbcTemplate jdbcTemplate;
     private FichierActivationReseau fichierReseau;
+    private CompteRenduReseau compteRendu;
 
     private int periode = 30;
     private int max = 200;
@@ -72,6 +74,7 @@ public class ActivationSimJob extends Thread {
     }
 
     void cycle() throws Exception {
+        compteRendu.traiter();
 
         List<CarteSim> sims = simDao.listerAActiver(max);
         if (!sims.isEmpty()) {
@@ -122,6 +125,10 @@ public class ActivationSimJob extends Thread {
 
     public void setFichierReseau(FichierActivationReseau fichierReseau) {
         this.fichierReseau = fichierReseau;
+    }
+
+    public void setCompteRendu(CompteRenduReseau compteRendu) {
+        this.compteRendu = compteRendu;
     }
 
     public void setPeriode(int periode) {

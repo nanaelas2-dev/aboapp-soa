@@ -115,12 +115,18 @@
 		<property name="dossierSortie" value="${reseau.dossier.sortie}" />
 		<property name="codeOperateur" value="${reseau.code.operateur}" />
 	</bean>
+	<bean id="compteRenduReseau" class="ma.telecomatlas.abo.batch.CompteRenduReseau">
+		<property name="simDao" ref="simDao" />
+		<property name="dossierEntree" value="${reseau.dossier.entree}" />
+		<property name="dossierArchives" value="${reseau.dossier.archives}" />
+	</bean>
 	<bean id="activationSimJob" class="ma.telecomatlas.abo.batch.ActivationSimJob" init-method="demarrer" destroy-method="arreter">
 		<property name="simDao" ref="simDao" />
 		<property name="abonnementDao" ref="abonnementDao" />
 		<property name="paramDao" ref="paramDao" />
 		<property name="jdbcTemplate" ref="jdbcTemplate" />
 		<property name="fichierReseau" ref="fichierReseau" />
+		<property name="compteRendu" ref="compteRenduReseau" />
 		<property name="periode" value="${batch.activation.periode}" />
 		<property name="max" value="${batch.activation.max}" />
 		<property name="actif" value="${batch.activation.actif}" />
