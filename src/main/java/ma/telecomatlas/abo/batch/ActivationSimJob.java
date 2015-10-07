@@ -74,6 +74,7 @@ public class ActivationSimJob extends Thread {
     }
 
     void cycle() throws Exception {
+        // FIXME karim 2015-10 : si la plateforme renvoie KO la SIM reste ERREUR_RES et l'abonnement EN_COURS
         compteRendu.traiter();
 
         List<CarteSim> sims = simDao.listerAActiver(max);
