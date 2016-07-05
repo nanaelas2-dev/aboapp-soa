@@ -465,6 +465,15 @@ public class AbonnementService {
 		return versInfo(f, true);
 	}
 
+	@WebMethod
+	public String estimerFacture(@WebParam(name = "numContrat") String numContrat) {
+		Abonnement a = abonnementDao.trouverParContrat(numContrat);
+		if (a == null) {
+			return "";
+		}
+		return MontantUtil.texte(facturationManager.estimationProchaineFacture(a));
+	}
+
 	/**
 	 * Paiement en caisse. Montant partiel refuse.
 	 */
@@ -518,6 +527,11 @@ public class AbonnementService {
 			res.add(ci);
 		}
 		return res;
+	}
+
+	@WebMethod
+	public List<String> verifierTarifs() {
+		return facturationManager.verifierTarifs();
 	}
 
 	// ================================================================ portabilite (saisie boutique)

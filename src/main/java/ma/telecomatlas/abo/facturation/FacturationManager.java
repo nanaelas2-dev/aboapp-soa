@@ -601,8 +601,12 @@ public class FacturationManager {
 			return forfaitNjoum149(ctx);
 		} else if ("PO-NJOUM249".equals(code)) {
 			return forfaitNjoum249(ctx);
+		} else if ("PO-ILIMIT299".equals(code)) {
+			return forfaitIllimite299(ctx);
 		} else if ("PO-CTRL79".equals(code)) {
 			return forfaitControle79(ctx);
+		} else if ("PO-CHABAB59".equals(code)) {
+			return forfaitChabab59(ctx);
 		} else if ("PO-DATA50".equals(code)) {
 			return forfaitData50(ctx);
 		} else if ("EN-PRO200".equals(code)) {
@@ -739,6 +743,25 @@ public class FacturationManager {
 		return MontantUtil.arrondi(prix);
 	}
 
+	/** Illimite 299 (remplace par 349 en novembre 2018) */
+	private double forfaitIllimite299(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(299.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2016) {
+			log.warn("PO-ILIMIT299 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.annee > 2018 || (ctx.annee == 2018 && ctx.moisNum >= 11)) {
+			// plus de tarif apres octobre 2018 : on facture au prix de l'offre
+			if (ctx.offre != null) {
+				prix = MontantUtil.ht(ctx.offre.getPrixMensuel(), TAUX_TVA);
+			}
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
 	/** Forfait bloque 79 : pas de hors forfait */
 	private double forfaitControle79(Contexte ctx) {
 		double prix = ctx.tarif.getPrixHt();
@@ -751,6 +774,29 @@ public class FacturationManager {
 
 		if (ctx.annee == 2015) {
 			prix = MontantUtil.ht(75.0, TAUX_TVA);
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Chabab 59 (moins de 26 ans) */
+	private double forfaitChabab59(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(59.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2016) {
+			log.warn("PO-CHABAB59 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.client.getDateNaissance() != null) {
+			int age = DateUtil.moisEntre(ctx.client.getDateNaissance(), ctx.finMois) / 12;
+			if (age >= 26) {
+				// plus eligible : on facture comme Njoum 99 depuis 2018
+				if (ctx.annee >= 2018) {
+					prix = MontantUtil.ht(99.0, TAUX_TVA);
+					ctx.trace.append(" chabab>26");
+				}
+			}
 		}
 		return MontantUtil.arrondi(prix);
 	}
@@ -1673,6 +1719,9 @@ public class FacturationManager {
 	 * aux 10 centimes superieurs (plus de pieces de 5 cts dans les caisses).
 	 */
 	private double arrondiParticulier(Contexte ctx, double v) {
+		if ("ESPECES".equals(ctx.abo.getModePaiement()) && ctx.annee >= 2016) {
+			return arrondiCaisse(v);
+		}
 		return arrondiCentime(v);
 	}
 
@@ -1945,6 +1994,199 @@ public class FacturationManager {
 			sb.append("  ").append(s).append(" : ").append(MontantUtil.affichage(parStatut.get(s).doubleValue())).append("\n");
 		}
 		return sb.toString();
+	}
+
+	// =====================================================================
+	// factures groupees entreprises (synthese par client)
+	// =====================================================================
+
+	/**
+	 * Synthese mensuelle d'un client entreprise : une ligne par abonnement + totaux.
+	 * Demande du service grands comptes (2015) : la facture "officielle" reste une par ligne,
+	 * la synthese est envoyee en plus au DAF du client. Non enregistree en base.
+	 */
+	public Facture syntheseEntreprise(int idClient, String mois) {
+		Client c = clientDao.trouver(idClient);
+		if (c == null || !c.isEntreprise()) {
+			return null;
+		}
+		List<Abonnement> abos = abonnementDao.listerParClient(idClient);
+		Facture s = new Facture();
+		s.setTypeDoc("SYNTHESE");
+		s.setIdClient(idClient);
+		s.setMois(mois);
+		s.setDateEmission(new Date());
+		s.setStatut("INFO");
+		double ht = 0;
+		double remise = 0;
+		double tva = 0;
+		double ttc = 0;
+		int nb = 0;
+		for (int i = 0; i < abos.size(); i++) {
+			Abonnement a = abos.get(i);
+			if ("RESILIE".equals(a.getStatut()) && a.getDateResiliation() != null && a.getDateResiliation().before(DateUtil.premierJourMois(mois))) {
+				continue;
+			}
+			if ("EN_ATTENTE".equals(a.getStatut())) {
+				continue;
+			}
+			Facture f = null;
+			// on reprend la facture emise si elle existe, sinon simulation
+			List<Facture> emises = factureDao.listerParAbonnement(a.getIdAbonnement());
+			for (int k = 0; k < emises.size(); k++) {
+				if (mois.equals(emises.get(k).getMois()) && !"ANNULEE".equals(emises.get(k).getStatut())) {
+					f = emises.get(k);
+					break;
+				}
+			}
+			if (f == null) {
+				f = simulerFacture(a, mois);
+			}
+			if (f == null) {
+				continue;
+			}
+			nb++;
+			LigneFacture l = new LigneFacture("LIGNE", a.getMsisdn() + " - " + a.getCodeOffre() + (f.getNumFacture() != null ? " (" + f.getNumFacture() + ")" : " (estimation)"),
+					1, f.getMontantHt() - f.getMontantRemise(), MontantUtil.arrondi(f.getMontantHt() - f.getMontantRemise()));
+			s.ajouterLigne(l);
+			ht += f.getMontantHt();
+			remise += f.getMontantRemise();
+			tva += f.getMontantTva();
+			ttc += f.getMontantTtc();
+		}
+		if (nb == 0) {
+			return null;
+		}
+		s.setMontantHt(MontantUtil.arrondi(ht));
+		s.setMontantRemise(MontantUtil.arrondi(remise));
+		s.setMontantTva(MontantUtil.arrondi(tva));
+		s.setMontantTtc(MontantUtil.arrondi(ttc));
+		return s;
+	}
+
+	/**
+	 * Estimation de la prochaine facture a partir de la moyenne des 3 derniers mois.
+	 * (ecran fiche client et operation estimerFacture)
+	 */
+	public double estimationProchaineFacture(Abonnement abo) {
+		List<Facture> l = factureDao.listerParAbonnement(abo.getIdAbonnement());
+		double somme = 0;
+		int n = 0;
+		for (int i = 0; i < l.size() && n < 3; i++) {
+			Facture f = l.get(i);
+			if (DOC_FACTURE.equals(f.getTypeDoc()) && !"ANNULEE".equals(f.getStatut())) {
+				somme += f.getMontantTtc();
+				n++;
+			}
+		}
+		if (n == 0) {
+			// pas d'historique : prix de l'offre
+			Offre o = offreDao.trouver(abo.getCodeOffre());
+			if (o != null) {
+				return o.getPrixMensuel();
+			}
+			OffreTarif t = offreDao.tarif(abo.getCodeOffre());
+			return t == null ? 0 : t.getPrixTtc();
+		}
+		return MontantUtil.arrondi(somme / n);
+	}
+
+	// =====================================================================
+	// coherence des referentiels
+	// =====================================================================
+
+	/**
+	 * Compare OFFRE et OFFRE_TARIF (prix, libelles, offres manquantes).
+	 * Lance a la main par l'operation verifierTarifs, le resultat part dans le log.
+	 */
+	public List<String> verifierTarifs() {
+		List<String> anomalies = new ArrayList<String>();
+		List<Map<String, Object>> offres = jdbcTemplate.queryForList("SELECT CODE_OFFRE, LIBELLE, PRIX_MENSUEL, TYPE_OFFRE, ACTIF FROM OFFRE");
+		List<Map<String, Object>> tarifs = jdbcTemplate.queryForList("SELECT CODE_OFFRE, LIBELLE_OFFRE, PRIX_TTC, TYPE_OFFRE FROM OFFRE_TARIF WHERE DATE_FIN IS NULL");
+		Map<String, Map<String, Object>> parCode = new HashMap<String, Map<String, Object>>();
+		for (int i = 0; i < tarifs.size(); i++) {
+			parCode.put((String) tarifs.get(i).get("CODE_OFFRE"), tarifs.get(i));
+		}
+		for (int i = 0; i < offres.size(); i++) {
+			Map<String, Object> o = offres.get(i);
+			String code = (String) o.get("CODE_OFFRE");
+			Map<String, Object> t = parCode.remove(code);
+			if (t == null) {
+				anomalies.add(code + " : pas de tarif en cours dans OFFRE_TARIF");
+				continue;
+			}
+			double p1 = ((Number) o.get("PRIX_MENSUEL")).doubleValue();
+			double p2 = t.get("PRIX_TTC") == null ? 0 : ((Number) t.get("PRIX_TTC")).doubleValue();
+			if (Math.abs(p1 - p2) > 0.001) {
+				anomalies.add(code + " : prix OFFRE " + p1 + " / OFFRE_TARIF " + p2);
+			}
+			String l1 = (String) o.get("LIBELLE");
+			String l2 = (String) t.get("LIBELLE_OFFRE");
+			if (l1 != null && !l1.equals(l2)) {
+				anomalies.add(code + " : libelle '" + l1 + "' / '" + l2 + "'");
+			}
+			if (!String.valueOf(o.get("TYPE_OFFRE")).equals(String.valueOf(t.get("TYPE_OFFRE")))) {
+				anomalies.add(code + " : type different");
+			}
+		}
+		Iterator<String> it = parCode.keySet().iterator();
+		while (it.hasNext()) {
+			anomalies.add(it.next() + " : present dans OFFRE_TARIF mais pas dans OFFRE");
+		}
+		for (int i = 0; i < anomalies.size(); i++) {
+			log.warn("tarifs : " + anomalies.get(i));
+		}
+		return anomalies;
+	}
+
+	// =====================================================================
+	// relances impayes (2016, en attente du module recouvrement)
+	// =====================================================================
+
+	/**
+	 * Niveau de relance d'une facture : 0 rien, 1 SMS, 2 courrier, 3 suspension.
+	 */
+	public int niveauRelance(Facture f, Date aujourdhui) {
+		if (f == null || !"EMISE".equals(f.getStatut()) && !"IMPAYEE".equals(f.getStatut())) {
+			return 0;
+		}
+		if (f.getDateEcheance() == null) {
+			return 0;
+		}
+		int retard = DateUtil.joursEntre(f.getDateEcheance(), aujourdhui);
+		if (retard <= 0) {
+			return 0;
+		}
+		if (retard <= 10) {
+			return 1;
+		}
+		if (retard <= 30) {
+			return 2;
+		}
+		double seuil = 300;
+		try {
+			seuil = Double.parseDouble(paramDao.lire("SEUIL_IMPAYE", "300"));
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		if (f.getMontantTtc() >= seuil) {
+			return 3;
+		}
+		return 2;
+	}
+
+	public String messageRelance(Facture f, int niveau) {
+		String mt = MontantUtil.texte(f.getMontantTtc());
+		switch (niveau) {
+		case 1:
+			return "Telecom Atlas : votre facture " + f.getNumFacture() + " de " + mt + " DH est arrivee a echeance. Merci de la regler en boutique ou par virement.";
+		case 2:
+			return "Telecom Atlas : sauf erreur, la facture " + f.getNumFacture() + " (" + mt + " DH) reste impayee. Sans reglement sous 8 jours votre ligne pourra etre suspendue.";
+		case 3:
+			return "Telecom Atlas : votre ligne va etre suspendue pour impaye (" + mt + " DH). Contactez le 777.";
+		default:
+			return null;
+		}
 	}
 
 	// =====================================================================
@@ -2327,6 +2569,88 @@ public class FacturationManager {
 		if (ctx.moisNum < 4 && !ctx.client.isEntreprise() && (ctx.client.getEmail() == null || ctx.client.getEmail().length() == 0)) {
 			ligne(f, L_FRAIS, "Facture papier", 1, 4.17, 4.17);
 		}
+	}
+
+	// =====================================================================
+	// version 2014 du postpaye, avant les promos ramadan / salon
+	// =====================================================================
+
+	/**
+	 * @deprecated remplace par calculerPostpaye en 2016, garde pour les recalculs 2014-2015
+	 */
+	Facture calculerPostpaye2014(Contexte ctx) {
+		Facture f = nouvelleFacture(ctx, DOC_FACTURE);
+		double forfait = ctx.tarif.getPrixHt();
+		if (forfait <= 0 && ctx.offre != null) {
+			forfait = MontantUtil.ht(ctx.offre.getPrixMensuel(), TAUX_TVA);
+		}
+		double p = MontantUtil.arrondi(forfait * ctx.prorata);
+		ligne(f, L_FORFAIT, "Forfait " + ctx.tarif.getLibelleOffre(), ctx.prorata, forfait, p);
+
+		int fMin = ctx.tarif.getForfaitMinutes();
+		if (fMin >= 0 && ctx.minutesNat > fMin) {
+			double q = Math.ceil(ctx.minutesNat - fMin);
+			double pu = ctx.tarif.getPrixMinNat() / 1.2;
+			ligne(f, L_HF_VOIX, "Appels hors forfait", q, pu, q * pu);
+		}
+		int fSms = ctx.tarif.getForfaitSms();
+		if (fSms >= 0 && ctx.sms > fSms) {
+			double q = Math.ceil(ctx.sms - fSms);
+			double pu = ctx.tarif.getPrixSms() / 1.2;
+			ligne(f, L_HF_SMS, "SMS hors forfait", q, pu, q * pu);
+		}
+		int fMo = ctx.tarif.getForfaitMo();
+		if (fMo >= 0 && ctx.dataMo > fMo) {
+			double q = Math.ceil(ctx.dataMo - fMo);
+			double pu = ctx.tarif.getPrixMo();
+			ligne(f, L_HF_DATA, "Internet hors forfait", q, pu, q * pu);
+		}
+		Iterator<String> it = ctx.inter.keySet().iterator();
+		while (it.hasNext()) {
+			String z = it.next();
+			double q = Math.ceil(ctx.inter.get(z).doubleValue());
+			double pu = ctx.tarif.getPrixMinInter() * coefZone(z) / 1.2;
+			ligne(f, L_INTER, "International " + z.toLowerCase(), q, pu, q * pu);
+		}
+		it = ctx.roaming.keySet().iterator();
+		while (it.hasNext()) {
+			String z = it.next();
+			double q = ctx.roaming.get(z).doubleValue();
+			ligne(f, L_ROAMING, "Itinerance " + z.toLowerCase(), q, 5.0, q * 5.0);
+		}
+		if ("BIENVENUE".equals(ctx.abo.getCodePromo())) {
+			promoBienvenue(ctx, f);
+		} else if ("PARRAINAGE".equals(ctx.abo.getCodePromo())) {
+			promoParrainage(ctx, f);
+		} else {
+			remiseFidelite(ctx, f);
+		}
+		if (ctx.annee == 2014) {
+			ajustements2014(ctx, f);
+		} else {
+			ajustements2015(ctx, f);
+		}
+		calculerTotaux(ctx, f);
+		return f;
+	}
+
+	/**
+	 * Comparaison ancien / nouveau calcul pour un contrat (outil service client).
+	 */
+	public String comparerCalculs(Abonnement abo, String mois) {
+		Contexte ctx = preparer(abo, mois, true);
+		if (ctx == null) {
+			return "rien a facturer";
+		}
+		Facture ancien = calculerPostpaye2014(ctx);
+		Contexte ctx2 = preparer(abo, mois, true);
+		Facture nouveau = calculerPostpaye(ctx2);
+		StringBuffer sb = new StringBuffer();
+		sb.append("contrat ").append(abo.getNumContrat()).append(" mois ").append(mois).append("\n");
+		sb.append("calcul 2014 : ").append(MontantUtil.texte(ancien.getMontantTtc())).append(" TTC, ").append(ancien.getLignes().size()).append(" lignes\n");
+		sb.append("calcul actuel : ").append(MontantUtil.texte(nouveau.getMontantTtc())).append(" TTC, ").append(nouveau.getLignes().size()).append(" lignes\n");
+		sb.append("ecart : ").append(MontantUtil.texte(nouveau.getMontantTtc() - ancien.getMontantTtc())).append("\n");
+		return sb.toString();
 	}
 
 	// =====================================================================
