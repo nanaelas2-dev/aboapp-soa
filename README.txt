@@ -2,10 +2,12 @@ AboApp - gestion des abonnes Telecom Atlas Mobile
 ==================================================
 
 Appli interne DSI : clients, abonnements, cartes SIM, facturation mensuelle, portabilite.
-Utilisee par les boutiques (logiciel caisse -> service web) et par le back-office (ecrans).
+Utilisee par les boutiques (logiciel caisse -> services web) et par le back-office (ecrans).
 
--> service SOAP : /abo/services/AbonnementService
+-> services SOAP : /abo/services/AbonnementService et /abo/services/PortabiliteService
 -> ecrans : recherche client, fiche client, catalogue des offres (mot de passe boutiques dans config.properties)
+-> batch : activation des SIM toutes les 30 s (fichier ACT_*.dat pour la plateforme reseau
+   dans echanges/reseau/sortie), comptes rendus a deposer dans echanges/reseau/entree
 
 Installation poste de dev
 -------------------------
@@ -14,11 +16,15 @@ Installation poste de dev
 3. mvn package, copier target/abo.war dans le tomcat (webapps)
 4. http://localhost:8080/abo/   et la liste des WSDL sur http://localhost:8080/abo/services/
 
-Mise en prod : deploy.sh (serveur 10.20.1.15) ou deploy.bat depuis le poste DSI. Serveur base : 192.168.1.20.
+Les dossiers echanges/... sont crees au lancement, relatifs au repertoire courant.
+Exemples de fichiers dans echanges/exemples (voir LISEZMOI.txt).
 
-Contact : Adil Chraibi (DSI, poste 4410)
+Mise en prod : deploy.sh (serveur 10.20.1.15) ou deploy.bat depuis le poste DSI.
+
+Contact : Nadia Fassi Fihri (DSI, poste 4412), Karim Saidi pour le batch et la portabilite.
 
 Problemes connus
 ----------------
+- la facturation du mois prend plusieurs minutes en prod, la caisse attend la reponse si on passe par le WS
 - les accents des noms de clients sortent mal dans l'export CSV ouvert avec Excel
-- la recherche par nom est lente quand on tape moins de 3 lettres
+- le batch activation peut prendre un cycle de retard si la plateforme n'a pas encore ramasse le fichier
