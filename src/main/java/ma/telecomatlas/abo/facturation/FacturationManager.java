@@ -168,6 +168,8 @@ public class FacturationManager {
 			f = calculerPrepayeSalam(ctx);
 		} else if (TYPE_PREPAYE.equals(type)) {
 			f = calculerPrepaye(ctx);
+		} else if ("EN-M2M10".equals(code)) {
+			f = calculerM2M(ctx);
 		} else if (TYPE_ENTREPRISE.equals(type)) {
 			f = calculerEntreprise(ctx);
 		} else if ("PO-CTRL79".equals(code)) {
@@ -617,6 +619,8 @@ public class FacturationManager {
 			return forfaitFlotte150(ctx);
 		} else if ("EN-FLOTTE300".equals(code)) {
 			return forfaitFlotte300(ctx);
+		} else if ("EN-M2M10".equals(code)) {
+			return forfaitM2M(ctx);
 		}
 		// offre inconnue : prix du tarif tel quel
 		log.warn("pas de regle de forfait pour " + code);
@@ -878,6 +882,23 @@ public class FacturationManager {
 
 		if (ctx.nbLignes > 10 && ctx.annee >= 2016) {
 			prix = MontantUtil.ht(285.0, TAUX_TVA);
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** M2M (terminaux de paiement, compteurs...). Le tarif est saisi sous EN-M2M */
+	private double forfaitM2M(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(10.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2017) {
+			log.warn("EN-M2M10 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		OffreTarif t = tarif("EN-M2M", ctx.mois);
+		if (t != null) {
+			prix = t.getPrixHt();
 		}
 		return MontantUtil.arrondi(prix);
 	}
@@ -1523,6 +1544,39 @@ public class FacturationManager {
 			penaliteResiliation(ctx, f);
 		}
 		calculerTotaux(ctx, f);
+		return f;
+	}
+
+	/**
+	 * M2M : pas de prorata, pas de promo, data facturee au Ko au-dela de 50 Mo, TVA selon zone.
+	 * Copie simplifiee de calculerEntreprise (2017).
+	 */
+	private Facture calculerM2M(Contexte ctx) {
+		Facture f = nouvelleFacture(ctx, DOC_FACTURE);
+		double forfait = montantForfait(ctx);
+		ligne(f, L_FORFAIT, "Carte M2M " + ctx.abo.getMsisdn() + " - " + libelleMois(ctx.mois), 1, forfait, forfait);
+		int inclus = ctx.offre != null ? ctx.offre.getDataMo() : 50;
+		if (ctx.dataMo > inclus) {
+			double depasse = ctx.dataMo - inclus;
+			double pu = ctx.tarif.getPrixMo();
+			double mt = MontantUtil.arrondi(depasse * pu);
+			if (mt > 50) {
+				mt = 50;
+			}
+			ligne(f, L_HF_DATA, "Donnees M2M au-dela du forfait (" + (long) depasse + " Mo)", depasse, pu, mt);
+		}
+		if (ctx.sms > 0) {
+			horsForfaitSmsEntreprise(ctx, f);
+		}
+		if (!ctx.roaming.isEmpty()) {
+			roamingEntreprise(ctx, f);
+		}
+		if ("SUSPENDU".equals(ctx.abo.getStatut())) {
+			// carte suspendue : forfait reduit de moitie (contrat cadre M2M)
+			double r = MontantUtil.arrondi(forfait * 0.5);
+			ligne(f, L_REMISE, "Carte suspendue", 1, -r, -r);
+		}
+		calculerTotauxEntreprise(ctx, f);
 		return f;
 	}
 
