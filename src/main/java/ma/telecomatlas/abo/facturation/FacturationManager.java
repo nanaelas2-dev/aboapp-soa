@@ -595,6 +595,8 @@ public class FacturationManager {
 			return forfaitJawal20(ctx);
 		} else if ("PP-JAWAL49".equals(code)) {
 			return forfaitJawal49(ctx);
+		} else if ("PP-JAWAL99".equals(code)) {
+			return forfaitJawal99(ctx);
 		} else if ("PO-NJOUM79".equals(code)) {
 			return forfaitNjoum79(ctx);
 		} else if ("PO-NJOUM99".equals(code)) {
@@ -668,6 +670,22 @@ public class FacturationManager {
 
 		if (ctx.dataMo > 5000 && ctx.annee >= 2018) {
 			ligne(ctx.facture, L_BONUS, "Bonus 1 Go offert (recharges du mois)", 1, 0, 0);
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Jawal 99 (pass 15 Go) */
+	private double forfaitJawal99(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(99.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2017) {
+			log.warn("PP-JAWAL99 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.annee == 2017 && ctx.moisNum >= 9) {
+			ligne(ctx.facture, L_BONUS, "Lancement Jawal 99 : reseaux sociaux illimites", 1, 0, 0);
 		}
 		return MontantUtil.arrondi(prix);
 	}
@@ -1278,6 +1296,8 @@ public class FacturationManager {
 			remise = promoEte2015(ctx, f);
 		} else if ("PARRAINAGE".equals(code)) {
 			remise = promoParrainage(ctx, f);
+		} else if ("SALON2017".equals(code)) {
+			remise = promoSalon2017(ctx, f);
 		} else if ("NOEL2012".equals(code)) {
 			remise = promoNoel2012(ctx, f);
 		} else {
@@ -1306,6 +1326,8 @@ public class FacturationManager {
 				remise = MontantUtil.arrondi(base * 0.5);
 				ligne(f, L_PROMO, "Offre de bienvenue entreprise -50% (1er mois)", 1, -remise, -remise);
 			}
+		} else if ("SALON2017".equals(code)) {
+			remise = promoSalon2017(ctx, f);
 		} else if ("FIDELITE".equals(code)) {
 			// pas de promo fidelite pour les entreprises, la remise flotte s'applique deja
 			log.debug("promo FIDELITE ignoree pour entreprise " + ctx.abo.getNumContrat());
@@ -1419,6 +1441,24 @@ public class FacturationManager {
 		double r = Math.min(30.0, base);
 		if (r > 0) {
 			ligne(f, L_PROMO, "Parrainage : -30 Dh (" + (n + 1) + "/6)", 1, -r, -r);
+		}
+		return r;
+	}
+
+	/** SALON2017 : contrats signes au salon (Casablanca, octobre 2017), -15% pendant 12 mois */
+	private double promoSalon2017(Contexte ctx, Facture f) {
+		Date debut = ctx.abo.getDateDebut();
+		if (debut == null) {
+			return 0;
+		}
+		int n = DateUtil.moisEntre(debut, ctx.finMois);
+		if (n >= 12) {
+			return 0;
+		}
+		double base = totalLignes(f, L_FORFAIT);
+		double r = MontantUtil.arrondi(base * 0.15);
+		if (r > 0) {
+			ligne(f, L_PROMO, "Offre salon -15% (" + (n + 1) + "/12)", 1, -r, -r);
 		}
 		return r;
 	}
