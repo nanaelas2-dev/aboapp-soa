@@ -607,6 +607,8 @@ public class FacturationManager {
 			return forfaitNjoum249(ctx);
 		} else if ("PO-ILIMIT299".equals(code)) {
 			return forfaitIllimite299(ctx);
+		} else if ("PO-ILIMIT349".equals(code)) {
+			return forfaitIllimite349(ctx);
 		} else if ("PO-CTRL79".equals(code)) {
 			return forfaitControle79(ctx);
 		} else if ("PO-CHABAB59".equals(code)) {
@@ -780,6 +782,23 @@ public class FacturationManager {
 			if (ctx.offre != null) {
 				prix = MontantUtil.ht(ctx.offre.getPrixMensuel(), TAUX_TVA);
 			}
+		}
+		return MontantUtil.arrondi(prix);
+	}
+
+	/** Illimite 349 */
+	private double forfaitIllimite349(Contexte ctx) {
+		double prix = ctx.tarif.getPrixHt();
+		if (prix <= 0) {
+			prix = MontantUtil.ht(349.0, TAUX_TVA);
+		}
+		if (ctx.annee < 2018) {
+			log.warn("PO-ILIMIT349 facture avant son lancement (" + ctx.mois + ") contrat " + ctx.abo.getNumContrat());
+		}
+
+		if (ctx.dataMo > 80000) {
+			// fair use : au dela de 80 Go debit reduit, pas de facturation
+			ligne(ctx.facture, L_BONUS, "Debit reduit au-dela de 80 Go", 1, 0, 0);
 		}
 		return MontantUtil.arrondi(prix);
 	}
@@ -1298,6 +1317,8 @@ public class FacturationManager {
 			remise = promoParrainage(ctx, f);
 		} else if ("SALON2017".equals(code)) {
 			remise = promoSalon2017(ctx, f);
+		} else if ("MONDIAL2018".equals(code)) {
+			remise = promoMondial2018(ctx, f);
 		} else if ("NOEL2012".equals(code)) {
 			remise = promoNoel2012(ctx, f);
 		} else {
@@ -1459,6 +1480,18 @@ public class FacturationManager {
 		double r = MontantUtil.arrondi(base * 0.15);
 		if (r > 0) {
 			ligne(f, L_PROMO, "Offre salon -15% (" + (n + 1) + "/12)", 1, -r, -r);
+		}
+		return r;
+	}
+
+	/** MONDIAL2018 : roaming Russie offert juin-juillet 2018 */
+	private double promoMondial2018(Contexte ctx, Facture f) {
+		if (ctx.annee != 2018 || (ctx.moisNum != 6 && ctx.moisNum != 7)) {
+			return 0;
+		}
+		double r = totalLignes(f, L_ROAMING);
+		if (r > 0) {
+			ligne(f, L_PROMO, "Mondial 2018 : itinerance offerte", 1, -r, -r);
 		}
 		return r;
 	}
