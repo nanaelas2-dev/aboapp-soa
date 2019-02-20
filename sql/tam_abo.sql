@@ -6,12 +6,19 @@
  * K. Saidi       06/2013  offre_tarif (tarifs du service facturation)
  * N. Fassi Fihri 02/2014  offre_boutique (catalogue boutiques)
  * K. Saidi       05/2015  demande_portabilite
+ * G. El Ouafi    03/2019  mysql 8 : utilisateur applicatif, jeu de donnees recette
  *
  * mysql -u root -p < sql/tam_abo.sql
  */
 
 DROP DATABASE IF EXISTS tam_abo;
 CREATE DATABASE tam_abo CHARACTER SET utf8 COLLATE utf8_general_ci;
+
+CREATE USER IF NOT EXISTS 'abo_app'@'localhost' IDENTIFIED WITH mysql_native_password BY 'TamAbo#2012';
+CREATE USER IF NOT EXISTS 'abo_app'@'%' IDENTIFIED WITH mysql_native_password BY 'TamAbo#2012';
+GRANT ALL PRIVILEGES ON tam_abo.* TO 'abo_app'@'localhost';
+GRANT ALL PRIVILEGES ON tam_abo.* TO 'abo_app'@'%';
+FLUSH PRIVILEGES;
 
 USE tam_abo;
 SET NAMES utf8;
