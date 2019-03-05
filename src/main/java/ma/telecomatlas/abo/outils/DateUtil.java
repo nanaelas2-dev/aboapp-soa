@@ -31,7 +31,10 @@ public class DateUtil {
 		return format(d, FMT_FR);
 	}
 
-	// pour les requetes
+	/**
+	 * Date -> "yyyy-MM-dd" pour les requetes. On ne passe plus de java.sql.Date
+	 * au driver depuis la migration (decalage d'un jour, voir G.E. 03/2019).
+	 */
 	public static String versSql(Date d) {
 		if (d == null) {
 			return null;
