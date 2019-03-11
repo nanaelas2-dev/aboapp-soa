@@ -11,9 +11,9 @@ Utilisee par les boutiques (logiciel caisse -> services web) et par le back-offi
 
 Installation poste de dev
 -------------------------
-1. mysql -u root -p < sql/tam_abo.sql      (cree la base tam_abo)
+1. mysql -u root -p < sql/tam_abo.sql      (cree la base tam_abo et l'utilisateur abo_app)
 2. verifier src/main/resources/config.properties (url jdbc, port 3306)
-3. mvn package, copier target/abo.war dans le tomcat (webapps)
+3. mvn package cargo:run
 4. http://localhost:8080/abo/   et la liste des WSDL sur http://localhost:8080/abo/services/
 
 Les dossiers echanges/... sont crees au lancement, relatifs au repertoire courant.
@@ -21,7 +21,7 @@ Exemples de fichiers dans echanges/exemples (voir LISEZMOI.txt).
 
 Mise en prod : deploy.sh (serveur 10.20.1.15) ou deploy.bat depuis le poste DSI.
 
-Contact : Nadia Fassi Fihri (DSI, poste 4412), Karim Saidi pour le batch et la portabilite.
+Contact : Ghita El Ouafi (DSI, poste 4417). Avant : Adil Chraibi, Nadia Fassi Fihri.
 
 Problemes connus
 ----------------
