@@ -47,7 +47,7 @@ Ville <select name="ville"><option value=""></option>
 		}
 		sql.append(" order by c.NOM limit 100");
 		List<Map<String, Object>> res = jt.queryForList(sql.toString(), p.toArray());
-		System.out.println("[index.jsp] " + "recherche nom=" + nom + " cin=" + cin + " tel=" + tel + " : " + res.size());
+		TraceJsp.info("index.jsp", "recherche nom=" + nom + " cin=" + cin + " tel=" + tel + " : " + res.size());
 %>
 <p><%= res.size() %> client(s)</p>
 <table class="liste">

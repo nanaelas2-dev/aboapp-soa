@@ -90,7 +90,7 @@
 </table>
 <% } %>
 <%
-		System.out.println("[client.jsp] " + "fiche " + c.getCodeClient() + " par " + session.getAttribute("boutique"));
+		TraceJsp.info("client.jsp", "fiche " + c.getCodeClient() + " par " + session.getAttribute("boutique"));
 	}
 %>
 <%@ include file="inc/pied.jsp" %>
