@@ -127,6 +127,7 @@
 		<property name="jdbcTemplate" ref="jdbcTemplate" />
 		<property name="fichierReseau" ref="fichierReseau" />
 		<property name="compteRendu" ref="compteRenduReseau" />
+		<property name="lotFacturation" ref="lotFacturation" />
 		<property name="periode" value="${batch.activation.periode}" />
 		<property name="max" value="${batch.activation.max}" />
 		<property name="actif" value="${batch.activation.actif}" />

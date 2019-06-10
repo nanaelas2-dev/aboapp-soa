@@ -7,7 +7,9 @@ Utilisee par les boutiques (logiciel caisse -> services web) et par le back-offi
 -> services SOAP : /abo/services/AbonnementService et /abo/services/PortabiliteService
 -> ecrans : recherche client, fiche client, catalogue des offres (mot de passe boutiques dans config.properties)
 -> batch : activation des SIM toutes les 30 s (fichier ACT_*.dat pour la plateforme reseau
-   dans echanges/reseau/sortie), comptes rendus a deposer dans echanges/reseau/entree
+   dans echanges/reseau/sortie), comptes rendus a deposer dans echanges/reseau/entree,
+   facturation du mois quand FACTURATION_LANCER = O dans la table PARAMETRE
+   (ou operation lancerFacturationMensuelle)
 
 Installation poste de dev
 -------------------------

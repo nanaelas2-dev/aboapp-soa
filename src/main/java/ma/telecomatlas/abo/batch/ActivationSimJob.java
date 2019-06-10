@@ -11,6 +11,7 @@ import ma.telecomatlas.abo.dao.ParamDao;
 import ma.telecomatlas.abo.dao.SimDAO;
 import ma.telecomatlas.abo.domaine.Abonnement;
 import ma.telecomatlas.abo.domaine.CarteSim;
+import ma.telecomatlas.abo.facturation.LotFacturation;
 
 import org.apache.log4j.Logger;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -19,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Batch lance au demarrage de l'appli (init-method) :
  *  - SIM A_ACTIVER -> fichier pour la plateforme reseau -> ACTIVE
  *  - lecture des comptes rendus reseau
+ *  - facturation mensuelle si demandee dans PARAMETRE
  *
  * @author ksaidi
  */
@@ -32,6 +34,7 @@ public class ActivationSimJob extends Thread {
     private JdbcTemplate jdbcTemplate;
     private FichierActivationReseau fichierReseau;
     private CompteRenduReseau compteRendu;
+    private LotFacturation lotFacturation;
 
     private int periode = 30;
     private int max = 200;
@@ -97,6 +100,14 @@ public class ActivationSimJob extends Thread {
             log.debug("rien a activer");
         }
 
+        // facturation demandee par le service facturation (ecran phpMyAdmin...)
+        if ("O".equals(paramDao.lire("FACTURATION_LANCER"))) {
+            paramDao.ecrire("FACTURATION_LANCER", "N");
+            String mois = paramDao.lire("FACTURATION_MOIS");
+            log.info("facturation demandee pour " + mois);
+            String res = lotFacturation.executer(mois);
+            log.info(res);
+        }
     }
 
     // utilise quand on reactivait les SIM une par une (2013)
@@ -130,6 +141,10 @@ public class ActivationSimJob extends Thread {
 
     public void setCompteRendu(CompteRenduReseau compteRendu) {
         this.compteRendu = compteRendu;
+    }
+
+    public void setLotFacturation(LotFacturation lotFacturation) {
+        this.lotFacturation = lotFacturation;
     }
 
     public void setPeriode(int periode) {

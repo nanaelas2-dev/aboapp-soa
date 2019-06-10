@@ -2317,6 +2317,71 @@ public class FacturationManager {
 	}
 
 	// =====================================================================
+	// ecritures comptables (journal des ventes)
+	// =====================================================================
+
+	/**
+	 * Lignes du journal des ventes pour une facture, format import Sage :
+	 * journal;date;compte;libelle;debit;credit
+	 * 3421 clients, 7124 prestations telecom, 7128 itinerance, 4455 TVA facturee, 4458 timbre
+	 */
+	public List<String> journalVentes(Facture f, Client c) {
+		List<String> l = new ArrayList<String>();
+		if (f == null || DOC_RELEVE.equals(f.getTypeDoc())) {
+			return l;
+		}
+		String date = DateUtil.versFr(f.getDateEmission());
+		String lib = (DOC_AVOIR.equals(f.getTypeDoc()) ? "AV " : "FA ") + f.getNumFacture() + " " + (c == null ? "" : couper(c.getNomComplet(), 25));
+		String compteClient = c != null && c.isEntreprise() ? "34211" : "34210";
+		double ttc = f.getMontantTtc();
+		double tva = f.getMontantTva();
+		double timbre = f.getDroitTimbre();
+		double itinerance = 0;
+		for (int i = 0; i < f.getLignes().size(); i++) {
+			LigneFacture lf = f.getLignes().get(i);
+			if (L_ROAMING.equals(lf.getCodeLigne())) {
+				itinerance += lf.getMontantHt();
+			}
+		}
+		double prestations = MontantUtil.arrondi(ttc - tva - timbre - itinerance);
+		if (ttc >= 0) {
+			l.add(ecriture("VT", date, compteClient, lib, ttc, 0));
+			if (prestations != 0) {
+				l.add(ecriture("VT", date, "7124", lib, 0, prestations));
+			}
+			if (itinerance != 0) {
+				l.add(ecriture("VT", date, "7128", lib, 0, MontantUtil.arrondi(itinerance)));
+			}
+			if (tva != 0) {
+				l.add(ecriture("VT", date, "4455", lib, 0, tva));
+			}
+			if (timbre != 0) {
+				l.add(ecriture("VT", date, "4458", lib, 0, timbre));
+			}
+		} else {
+			l.add(ecriture("VT", date, compteClient, lib, 0, -ttc));
+			if (prestations != 0) {
+				l.add(ecriture("VT", date, "7124", lib, -prestations, 0));
+			}
+			if (itinerance != 0) {
+				l.add(ecriture("VT", date, "7128", lib, -MontantUtil.arrondi(itinerance), 0));
+			}
+			if (tva != 0) {
+				l.add(ecriture("VT", date, "4455", lib, -tva, 0));
+			}
+			if (timbre != 0) {
+				l.add(ecriture("VT", date, "4458", lib, -timbre, 0));
+			}
+		}
+		return l;
+	}
+
+	private String ecriture(String journal, String date, String compte, String lib, double debit, double credit) {
+		return journal + ";" + date + ";" + compte + ";" + lib.replace(';', ',') + ";" + (debit == 0 ? "" : MontantUtil.texte(debit)) + ";"
+				+ (credit == 0 ? "" : MontantUtil.texte(credit));
+	}
+
+	// =====================================================================
 	// anciennes versions (2012-2013), plus appelees
 	// =====================================================================
 

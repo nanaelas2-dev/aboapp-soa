@@ -1,0 +1,16 @@
+Fichiers echanges avec la plateforme reseau (HLR)
+=================================================
+
+1) ACT_<operateur>_<date>_<heure>.dat  : ecrit par AboApp dans echanges/reseau/sortie
+   largeur fixe 80 caracteres, fin de ligne CRLF
+
+   en-tete : H + code operateur (5) + horodatage yyyyMMddHHmmss (14) + nb lignes (6)
+   detail  : D + action (3, ACT) + ICCID (20) + IMSI (15) + MSISDN international (12)
+             + code offre (15) + profil (1 : P prepaye, A abonnement, E entreprise)
+   fin     : T + nb lignes (6)
+
+2) CR_<date>.txt : compte rendu de la plateforme, a deposer dans echanges/reseau/entree
+   ICCID;OK|KO;code erreur;libelle
+   les fichiers traites partent dans echanges/reseau/archives
+
+3) VT_<lot>.csv : journal des ventes pour la compta (echanges/compta), separateur ;

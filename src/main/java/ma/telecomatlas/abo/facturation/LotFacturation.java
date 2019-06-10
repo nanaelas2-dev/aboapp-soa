@@ -1,5 +1,9 @@
 package ma.telecomatlas.abo.facturation;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -12,6 +16,7 @@ import ma.telecomatlas.abo.dao.ParamDao;
 import ma.telecomatlas.abo.domaine.Abonnement;
 import ma.telecomatlas.abo.domaine.Facture;
 import ma.telecomatlas.abo.metier.NumeroteurHelper;
+import ma.telecomatlas.abo.outils.ConfigUtil;
 
 import org.apache.log4j.Logger;
 
@@ -83,6 +88,7 @@ public class LotFacturation {
 				}
 			}
 			paramDao.ecrire("FACTURATION_DERNIER_LOT", lot);
+			ecrireJournalVentes(lot, faites);
 			log.info(facturationManager.recapLot(lot, faites));
 		} finally {
 			enCours = false;
@@ -91,6 +97,31 @@ public class LotFacturation {
 				+ (System.currentTimeMillis() - t0) / 1000 + " s)";
 		System.out.println("=== FACTURATION " + mois + " fin : " + res);
 		return res;
+	}
+
+	/** fichier pour la compta (import Sage), meme dossier que les echanges */
+	private void ecrireJournalVentes(String lot, List<Facture> factures) {
+		File dir = new File(ConfigUtil.get("compta.dossier", "echanges/compta"));
+		if (!dir.exists()) {
+			dir.mkdirs();
+		}
+		PrintWriter pw = null;
+		try {
+			pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(new File(dir, "VT_" + lot + ".csv")), "ISO-8859-1"));
+			for (int i = 0; i < factures.size(); i++) {
+				Facture f = factures.get(i);
+				List<String> l = facturationManager.journalVentes(f, clientDao.trouver(f.getIdClient()));
+				for (int k = 0; k < l.size(); k++) {
+					pw.println(l.get(k));
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			if (pw != null) {
+				pw.close();
+			}
+		}
 	}
 
 	public boolean isEnCours() {
