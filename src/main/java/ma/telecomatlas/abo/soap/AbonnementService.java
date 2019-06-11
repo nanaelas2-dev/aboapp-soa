@@ -529,6 +529,24 @@ public class AbonnementService {
 		return res;
 	}
 
+	/**
+	 * Lance la facturation du mois en direct (le service facturation l'appelle depuis SoapUI).
+	 * Attention : la reponse n'arrive qu'a la fin du lot.
+	 */
+	@WebMethod
+	public Reponse lancerFacturationMensuelle(@WebParam(name = "mois") String mois) {
+		if (mois == null || !mois.matches("\\d{4}-\\d{2}")) {
+			return Reponse.ko("mois attendu au format yyyy-MM");
+		}
+		if (lotFacturation.isEnCours()) {
+			return Reponse.ko("une facturation est deja en cours");
+		}
+		String res = lotFacturation.executer(mois);
+		Reponse r = Reponse.ok(mois);
+		r.setMessage(res);
+		return r;
+	}
+
 	@WebMethod
 	public List<String> verifierTarifs() {
 		return facturationManager.verifierTarifs();
