@@ -4,7 +4,7 @@
 	<groupId>ma.telecomatlas</groupId>
 	<artifactId>tam-abonnements</artifactId>
 	<packaging>war</packaging>
-	<version>4.0</version>
+	<version>4.1</version>
 	<name>AboApp - gestion des abonnes</name>
 	<url>http://intranet.telecomatlas.ma/abo</url>
 
