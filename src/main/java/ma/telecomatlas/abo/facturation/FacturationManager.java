@@ -476,6 +476,9 @@ public class FacturationManager {
 
 		appliquerPromotionsEntreprise(ctx, f);
 		remiseFlotte(ctx, f);
+		if (ctx.annee >= 2019) {
+			ajustements2019(ctx, f);
+		}
 
 		if ("SUSPENDU".equals(ctx.abo.getStatut()) && ctx.annee >= 2015) {
 			ligne(f, L_FRAIS, "Frais de suspension de ligne", 1, 20.0, 20.0);
@@ -2699,7 +2702,7 @@ public class FacturationManager {
 			ajustements2018(ctx, f);
 			break;
 		default:
-			ajustements2018(ctx, f);
+			ajustements2019(ctx, f);
 		}
 	}
 
@@ -2760,6 +2763,29 @@ public class FacturationManager {
 		// facture papier : gratuite depuis avril 2018 (decision ANRT)
 		if (ctx.moisNum < 4 && !ctx.client.isEntreprise() && (ctx.client.getEmail() == null || ctx.client.getEmail().length() == 0)) {
 			ligne(f, L_FRAIS, "Facture papier", 1, 4.17, 4.17);
+		}
+	}
+
+	private void ajustements2019(Contexte ctx, Facture f) {
+		// regularisations saisies a la main par le service client (PARAMETRE REGUL_<contrat>=montant HT;libelle)
+		String r = null;
+		try {
+			r = paramDao.lire("REGUL_" + ctx.abo.getNumContrat());
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		if (r == null || r.trim().length() == 0) {
+			return;
+		}
+		String[] t = r.split(";");
+		double mt = MontantUtil.lire(t[0]);
+		String lib = t.length > 1 ? t[1] : "Regularisation";
+		if (mt != 0) {
+			ligne(f, "REGUL", lib, 1, mt, mt);
+			ctx.trace.append(" regul=").append(mt);
+		}
+		if (!ctx.simulation) {
+			paramDao.ecrire("REGUL_" + ctx.abo.getNumContrat(), "");
 		}
 	}
 
