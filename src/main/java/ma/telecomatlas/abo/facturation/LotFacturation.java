@@ -88,6 +88,7 @@ public class LotFacturation {
 				}
 			}
 			paramDao.ecrire("FACTURATION_DERNIER_LOT", lot);
+			// TODO ghita 2019-11 : envoyer le recap par mail a la compta
 			ecrireJournalVentes(lot, faites);
 			log.info(facturationManager.recapLot(lot, faites));
 		} finally {
